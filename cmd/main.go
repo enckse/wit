@@ -66,6 +66,9 @@ type (
 func doScheduled(ctx context) error {
 	lock.Lock()
 	defer lock.Unlock()
+	if !exists(ctx.schedule) {
+		return nil
+	}
 	b, err := os.ReadFile(ctx.schedule)
 	if err != nil {
 		return err
@@ -84,6 +87,7 @@ func schedulerDaemon(ctx context) {
 	today := time.Now()
 	fmt.Println("scheduler started")
 	for {
+		time.Sleep(5 * time.Second)
 		now := time.Now()
 		if now.Day() != today.Day() {
 			if exists(ctx.lock) {
@@ -98,7 +102,6 @@ func schedulerDaemon(ctx context) {
 			}
 		}
 		today = now
-		time.Sleep(5 * time.Second)
 	}
 }
 
