@@ -25,6 +25,8 @@ const (
 	onAction  = "on"
 	offAction = "off"
 	noAction  = ""
+	isDisplay = "display"
+	endpoint  = "/wit/"
 )
 
 type (
@@ -366,14 +368,14 @@ func doActionCall(w http.ResponseWriter, r *http.Request, ctx context) {
 	}
 	action := parts[2]
 	isPost := r.Method == "POST"
-	if action != "display" {
+	if action != isDisplay {
 		if err := act(action, isPost, r, ctx); err != nil {
 			doTemplate(w, ctx.errorTemplate, Result{Error: fmt.Sprintf("%v", err)})
 			return
 		}
 	}
 	if isPost {
-		http.Redirect(w, r, "/temperature/display", http.StatusSeeOther)
+		http.Redirect(w, r, fmt.Sprintf("%s%s", endpoint, isDisplay), http.StatusSeeOther)
 		return
 	}
 	result := Result{}
@@ -400,7 +402,7 @@ func doActionCall(w http.ResponseWriter, r *http.Request, ctx context) {
 }
 
 func host(binding string, ctx context) {
-	http.HandleFunc("/temperature/", func(w http.ResponseWriter, r *http.Request) {
+	http.HandleFunc(endpoint, func(w http.ResponseWriter, r *http.Request) {
 		doActionCall(w, r, ctx)
 	})
 
