@@ -145,25 +145,25 @@ func fatal(message string, err error) {
 func main() {
 	binding := flag.String("binding", ":8888", "http binding")
 	config := flag.String("lirccfg", "BRYANT", "lirc config")
-	cache := flag.String("cache", "/var/cache/temperature", "cache directory")
+	lib := flag.String("cache", "/var/lib/wit", "cache directory")
 	device := flag.String("device", "/run/lirc/lircd", "lircd device")
 	irSend := flag.String("irsend", "/usr/bin/irsend", "irsend executable")
 	flag.Parse()
 	ctx := context{}
-	caching := *cache
-	if !exists(caching) {
-		if err := os.MkdirAll(caching, 0755); err != nil {
-			fatal("unable to make cache dir", err)
+	library := *lib
+	if !exists(library) {
+		if err := os.MkdirAll(library, 0755); err != nil {
+			fatal("unable to make library dir", err)
 		}
 	}
-	ctx.modeAC = filepath.Join(caching, "acmode")
+	ctx.modeAC = filepath.Join(library, "acmode")
 	ctx.device = *device
 	ctx.sendIR = *irSend
 	ctx.configFile = *config
-	ctx.lock = filepath.Join(caching, "lock")
-	ctx.schedule = filepath.Join(caching, "schedule")
-	ctx.hold = filepath.Join(caching, "hold")
-	ctx.running = filepath.Join(caching, "running")
+	ctx.lock = filepath.Join(library, "lock")
+	ctx.schedule = filepath.Join(library, "schedule")
+	ctx.hold = filepath.Join(library, "hold")
+	ctx.running = filepath.Join(library, "running")
 	tmpl, err := template.New("error").Parse("<html><body>{{ .Error }}</body></html>")
 	if err != nil {
 		fatal("invalid template for errors", err)
