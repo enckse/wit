@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -23,6 +24,7 @@ var (
 const (
 	onAction  = "on"
 	offAction = "off"
+	noAction  = ""
 )
 
 type (
@@ -36,6 +38,11 @@ type (
 		Mode     string
 		Schedule string
 	}
+	scheduleTime struct {
+		hour   int
+		min    int
+		action string
+	}
 	context struct {
 		modeAC        string
 		sendIR        string
@@ -48,7 +55,58 @@ type (
 		pageTemplate  *template.Template
 		errorTemplate *template.Template
 	}
+	// ThermError are all web therm errors.
+	ThermError struct {
+		message string
+	}
 )
+
+func doScheduled(ctx context) error {
+	lock.Lock()
+	defer lock.Unlock()
+	b, err := os.ReadFile(ctx.schedule)
+	if err != nil {
+		return err
+	}
+	action, err := parseSchedule(string(b))
+	if err != nil {
+		return err
+	}
+	if action != noAction {
+		return act(action, true, nil, ctx)
+	}
+	return nil
+}
+
+func schedulerDaemon(ctx context) {
+	today := time.Now()
+	fmt.Println("scheduler started")
+	for {
+		now := time.Now()
+		if now.Day() != today.Day() {
+			if exists(ctx.lock) {
+				if err := os.Remove(ctx.lock); err != nil {
+					onError("unable to remove lock", err)
+				}
+			}
+		}
+		if !exists(ctx.hold) {
+			if err := doScheduled(ctx); err != nil {
+				onError("scheduler failed", err)
+			}
+		}
+		today = now
+		time.Sleep(5 * time.Second)
+	}
+}
+
+func (t *ThermError) Error() string {
+	return t.message
+}
+
+func newScheduleTime(hr, min int, action string) scheduleTime {
+	return scheduleTime{hour: hr, min: min, action: action}
+}
 
 func exists(path string) bool {
 	if _, err := os.Stat(path); err != nil {
@@ -116,6 +174,7 @@ func main() {
 		fatal("unable to read html template", err)
 	}
 	ctx.pageTemplate = page
+	go schedulerDaemon(ctx)
 	host(*binding, ctx)
 }
 
@@ -123,13 +182,13 @@ func write(path string) error {
 	return os.WriteFile(path, []byte(""), 0644)
 }
 
-func act(action string, isPost bool, req *http.Request, ctx context) error {
+func act(action string, isChange bool, req *http.Request, ctx context) error {
 	webRequest := req != nil
 	canChange := true
 	if exists(ctx.lock) && !webRequest {
 		canChange = false
 	}
-	if isPost {
+	if isChange {
 		switch action {
 		case "calibrate":
 			if exists(ctx.running) {
@@ -191,7 +250,7 @@ func act(action string, isPost bool, req *http.Request, ctx context) error {
 					holding = true
 				case "sched":
 					schedule = strings.Join(v, "\n")
-					if _, err := parseSchedule(schedule, time.Now(), webRequest); err != nil {
+					if _, err := parseSchedule(schedule); err != nil {
 						return err
 					}
 				}
@@ -229,8 +288,52 @@ func act(action string, isPost bool, req *http.Request, ctx context) error {
 	return nil
 }
 
-func parseSchedule(schedule string, now time.Time, webRequest bool) (string, error) {
-	return "", nil
+func parseSchedule(schedule string) (string, error) {
+	current := time.Now()
+	tracking := newScheduleTime(0, 0, offAction)
+	timings := []scheduleTime{tracking}
+	for _, line := range strings.Split(strings.TrimSpace(schedule), "\n") {
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+		parts := strings.Split(strings.TrimSpace(line), " ")
+		if len(parts) != 3 {
+			return "", &ThermError{"invalid schedule line, should be 'min hour action'"}
+		}
+		toggle := parts[2]
+		if toggle != onAction && toggle != offAction {
+			return "", &ThermError{"schedule can only be 'on' or 'off'"}
+		}
+		hour, err := strconv.Atoi(parts[1])
+		if err != nil {
+			return "", err
+		}
+		if hour < 0 || hour > 23 {
+			return "", &ThermError{"hour is invalid"}
+		}
+		min, err := strconv.Atoi(parts[0])
+		if err != nil {
+			return "", err
+		}
+		if min < 0 || min > 59 {
+			return "", &ThermError{"minute is invalid"}
+		}
+		lineTrack := newScheduleTime(hour, min, toggle)
+		timings = append(timings, lineTrack)
+	}
+	match := noAction
+	curr := newScheduleTime(current.Hour(), current.Minute(), "")
+	for _, timing := range timings {
+		if curr.min >= timing.min && curr.hour >= timing.hour {
+			match = timing.action
+		}
+		if match != noAction {
+			if curr.min < timing.min && curr.hour < timing.hour {
+				break
+			}
+		}
+	}
+	return match, nil
 }
 
 func (ctx context) lockNow(canLock bool) error {
