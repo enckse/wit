@@ -1,3 +1,3 @@
-module voidedtech.com/webtherm
+module voidedtech.com/wit
 
 go 1.16

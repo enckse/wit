@@ -1,5 +1,5 @@
 BIN := bin/
-WEB := $(BIN)webtherm
+WEB := $(BIN)wit
 
 all: $(WEB)
 
