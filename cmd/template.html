@@ -50,7 +50,7 @@ textarea {
   display: block;
 }
 </style>
-<title>temperature</title>
+<title>wit</title>
 </head>
 <body>
 <div id="main">
@@ -60,11 +60,11 @@ textarea {
         <tr><td>Running:</td><td><b>{{ .Running }}</b></td></tr>
         <tr><td>Mode:</td><td><b>{{ .System }}</b></td></tr>
     </table>
-    <form action='/temperature/on' method='post'>
+    <form action='/wit/on' method='post'>
         <button type="submit">ON</button>
     </form>
     <br />
-    <form action='/temperature/off' method='post'>
+    <form action='/wit/off' method='post'>
         <button type="submit">OFF</button>
     </form>
     <hr />
@@ -73,14 +73,14 @@ textarea {
         <tr><td>Hold:</td><td><b>{{ .Hold }}</b></td></tr>
     </table>
     <br />
-    <form action='/temperature/togglelock' method='POST'>
+    <form action='/wit/togglelock' method='POST'>
         <button type="submit">Run/Override</button>
     </form>
     <hr />
     <label for="trigger">Advanced</label>
     <input id="trigger" type="checkbox">
     <div class="box">
-        <form action='/temperature/schedule' method='POST'>
+        <form action='/wit/schedule' method='POST'>
             <textarea id="sched" name="sched">{{ .Schedule }}</textarea>
             <br />
             Hold:
@@ -89,12 +89,12 @@ textarea {
         </form>
         <br />
         <br />
-        <form action='/temperature/calibrate' method='POST'>
+        <form action='/wit/calibrate' method='POST'>
             <button type="submit">Calibrate</button>
         </form>
         <br />
         <br />
-        <form action='/temperature/acmode' method='POST'>
+        <form action='/wit/acmode' method='POST'>
             <button type="submit">AC/Heat</button>
         </form>
     </div>
