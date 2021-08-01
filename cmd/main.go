@@ -1,0 +1,311 @@
+package main
+
+import (
+	_ "embed"
+	"flag"
+	"fmt"
+	"html/template"
+	"net/http"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"strings"
+	"sync"
+	"time"
+)
+
+var (
+	lock = &sync.Mutex{}
+	//go:embed template.html
+	templateHTML string
+)
+
+const (
+	onAction  = "on"
+	offAction = "off"
+)
+
+type (
+	// Result is how html results are shown.
+	Result struct {
+		Error    string
+		Running  string
+		System   string
+		Time     string
+		Hold     string
+		Mode     string
+		Schedule string
+	}
+	context struct {
+		modeAC        string
+		sendIR        string
+		device        string
+		configFile    string
+		lock          string
+		schedule      string
+		hold          string
+		running       string
+		pageTemplate  *template.Template
+		errorTemplate *template.Template
+	}
+)
+
+func exists(path string) bool {
+	if _, err := os.Stat(path); err != nil {
+		if os.IsNotExist(err) {
+			return false
+		}
+	}
+	return true
+}
+
+func (ctx context) mode(start bool) string {
+	op := "HEAT"
+	if exists(ctx.modeAC) {
+		op = "AC"
+	}
+	postfix := "STOP"
+	if start {
+		postfix = "START"
+	}
+	return fmt.Sprintf("%s%s", op, postfix)
+}
+
+func onError(message string, err error) {
+	errorText := ""
+	if err != nil {
+		errorText = fmt.Sprintf(" (%v)", err)
+	}
+	fmt.Printf("%s%s\n", message, errorText)
+}
+
+func fatal(message string, err error) {
+	onError(message, err)
+	os.Exit(1)
+}
+
+func main() {
+	binding := flag.String("binding", ":8888", "http binding")
+	config := flag.String("lirccfg", "", "lirc config")
+	cache := flag.String("cache", "/var/cache/temperature", "cache directory")
+	device := flag.String("device", "/run/lirc/lircd", "lircd device")
+	irSend := flag.String("irsend", "/usr/bin/irsend", "irsend executable")
+	flag.Parse()
+	ctx := context{}
+	caching := *cache
+	if !exists(caching) {
+		if err := os.MkdirAll(caching, 0755); err != nil {
+			fatal("unable to make cache dir", err)
+		}
+	}
+	ctx.modeAC = filepath.Join(caching, "acmode")
+	ctx.device = *device
+	ctx.sendIR = *irSend
+	ctx.configFile = *config
+	ctx.lock = filepath.Join(caching, "lock")
+	ctx.schedule = filepath.Join(caching, "schedule")
+	ctx.hold = filepath.Join(caching, "hold")
+	ctx.running = filepath.Join(caching, "running")
+	tmpl, err := template.New("error").Parse("<html><body>{{ .Error }}</body></html>")
+	if err != nil {
+		fatal("invalid template for errors", err)
+	}
+	ctx.errorTemplate = tmpl
+	page, err := template.New("page").Parse(templateHTML)
+	if err != nil {
+		fatal("unable to read html template", err)
+	}
+	ctx.pageTemplate = page
+	host(*binding, ctx)
+}
+
+func write(path string) error {
+	return os.WriteFile(path, []byte(""), 0644)
+}
+
+func act(action string, isPost bool, req *http.Request, ctx context) error {
+	webRequest := req != nil
+	canChange := true
+	if exists(ctx.lock) && !webRequest {
+		canChange = false
+	}
+	if isPost {
+		switch action {
+		case "calibrate":
+			if exists(ctx.running) {
+				if err := os.Remove(ctx.running); err != nil {
+					return err
+				}
+			} else {
+				if err := write(ctx.running); err != nil {
+					return err
+				}
+			}
+		case onAction, offAction:
+			if err := ctx.lockNow(webRequest); err != nil {
+				return err
+			}
+			isOn := action == onAction
+			if canChange {
+				actuating := false
+				if isOn {
+					if !exists(ctx.running) {
+						if err := write(ctx.running); err != nil {
+							return err
+						}
+						actuating = true
+					}
+				} else {
+					if exists(ctx.running) {
+						if err := os.Remove(ctx.running); err != nil {
+							return err
+						}
+						actuating = true
+					}
+				}
+				if actuating {
+					if err := ctx.actuate(ctx.mode(isOn)); err != nil {
+						return err
+					}
+				}
+			}
+		case "togglelock":
+			if exists(ctx.lock) {
+				if err := os.Remove(ctx.lock); err != nil {
+					return err
+				}
+			} else {
+				if err := write(ctx.lock); err != nil {
+					return err
+				}
+			}
+		case "schedule":
+			if err := req.ParseForm(); err != nil {
+				return err
+			}
+			holding := false
+			schedule := ""
+			for k, v := range req.Form {
+				switch k {
+				case "hold":
+					holding = true
+				case "sched":
+					schedule = strings.Join(v, "\n")
+					if _, err := parseSchedule(schedule, time.Now(), webRequest); err != nil {
+						return err
+					}
+				}
+			}
+			if holding {
+				if err := write(ctx.hold); err != nil {
+					return err
+				}
+			} else {
+				if exists(ctx.hold) {
+					if err := os.Remove(ctx.hold); err != nil {
+						return err
+					}
+				}
+			}
+			if err := os.WriteFile(ctx.schedule, []byte(schedule), 0644); err != nil {
+				return err
+			}
+		case "acmode":
+			if exists(ctx.modeAC) {
+				if err := os.Remove(ctx.modeAC); err != nil {
+					return err
+				}
+			} else {
+				if err := write(ctx.modeAC); err != nil {
+					return err
+				}
+			}
+		default:
+			onError(fmt.Sprintf("unknown action: %s", action), nil)
+			return nil
+		}
+		return nil
+	}
+	return nil
+}
+
+func parseSchedule(schedule string, now time.Time, webRequest bool) (string, error) {
+	return "", nil
+}
+
+func (ctx context) lockNow(canLock bool) error {
+	if canLock {
+		return write(ctx.lock)
+	}
+	return nil
+}
+
+func setYes(path string) string {
+	if exists(path) {
+		return "YES"
+	}
+	return "NO"
+}
+
+func doTemplate(w http.ResponseWriter, tmpl *template.Template, obj Result) {
+	if err := tmpl.Execute(w, obj); err != nil {
+		onError("unable to execute template", err)
+	}
+}
+
+func doActionCall(w http.ResponseWriter, r *http.Request, ctx context) {
+	lock.Lock()
+	defer lock.Unlock()
+	parts := strings.Split(r.URL.String(), "/")
+	if len(parts) != 3 {
+		onError("invalid action, not given", nil)
+		return
+	}
+	action := parts[2]
+	isPost := r.Method == "POST"
+	if action != "display" {
+		if err := act(action, isPost, r, ctx); err != nil {
+			doTemplate(w, ctx.errorTemplate, Result{Error: fmt.Sprintf("%v", err)})
+			return
+		}
+	}
+	if isPost {
+		http.Redirect(w, r, "/temperature/display", http.StatusSeeOther)
+		return
+	}
+	result := Result{}
+	result.Running = setYes(ctx.running)
+	result.Mode = setYes(ctx.lock)
+	result.Hold = setYes(ctx.hold)
+	schedule := ""
+	if exists(ctx.schedule) {
+		b, err := os.ReadFile(ctx.schedule)
+		if err != nil {
+			onError("unable to read schedule", err)
+			return
+		}
+		schedule = strings.TrimSpace(string(b))
+	}
+	result.Schedule = schedule
+	result.Time = time.Now().Format("2006-01-02T15:04:05")
+	acMode := "HEAT"
+	if exists(ctx.modeAC) {
+		acMode = "A/C"
+	}
+	result.System = acMode
+	doTemplate(w, ctx.pageTemplate, result)
+}
+
+func host(binding string, ctx context) {
+	http.HandleFunc("/temperature/", func(w http.ResponseWriter, r *http.Request) {
+		doActionCall(w, r, ctx)
+	})
+
+	if err := http.ListenAndServe(binding, nil); err != nil {
+		onError("listen and server", err)
+	}
+}
+
+func (ctx context) actuate(mode string) error {
+	return exec.Command(ctx.sendIR, fmt.Sprintf("--device=%s", ctx.device), "SEND_ONCE", ctx.configFile, mode).Run()
+}

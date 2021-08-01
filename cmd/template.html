@@ -1,0 +1,103 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<style>
+body
+{
+    background-color:#f0f0f0;
+    font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
+}
+#main
+{
+    width: 85%;
+    margin-left: auto;
+    margin-right: auto;
+    padding:20px 20px 20px 20px;
+    overflow-x: auto;
+}
+#header
+{
+    font-size:24px;	
+}
+form {
+    border: 3px solid #f1f1f1;
+}
+
+button,input {
+    background-color: #4CAF50;
+    color: white;
+    padding: 14px 20px;
+    margin: 8px 0;
+    border: none;
+    cursor: pointer;
+    width: 100%;
+}
+
+button:hover,input:hover {
+    opacity: 0.8;
+}
+
+textarea {
+    width: 98%;
+    height: 100px;
+}
+
+.box {
+  display: none;
+}
+#trigger:checked + .box {
+  display: block;
+}
+</style>
+<title>temperature</title>
+</head>
+<body>
+<div id="main">
+    {{ .Time }}
+<hr />
+    <table>
+        <tr><td>Running:</td><td><b>{{ .Running }}</b></td></tr>
+        <tr><td>Mode:</td><td><b>{{ .System }}</b></td></tr>
+    </table>
+    <form action='/temperature/on' method='post'>
+        <button type="submit">ON</button>
+    </form>
+    <br />
+    <form action='/temperature/off' method='post'>
+        <button type="submit">OFF</button>
+    </form>
+    <hr />
+    <table>
+        <tr><td>Override:</td><td><b>{{ .Mode }}</b></td></tr>
+        <tr><td>Hold:</td><td><b>{{ .Hold }}</b></td></tr>
+    </table>
+    <br />
+    <form action='/temperature/togglelock' method='POST'>
+        <button type="submit">Run/Override</button>
+    </form>
+    <hr />
+    <label for="trigger">Advanced</label>
+    <input id="trigger" type="checkbox">
+    <div class="box">
+        <form action='/temperature/schedule' method='POST'>
+            <textarea id="sched" name="sched">{{ .Schedule }}</textarea>
+            <br />
+            Hold:
+            <input type="checkbox" name="hold"/>
+            <input type="submit" value="Set Schedule" />
+        </form>
+        <br />
+        <br />
+        <form action='/temperature/calibrate' method='POST'>
+            <button type="submit">Calibrate</button>
+        </form>
+        <br />
+        <br />
+        <form action='/temperature/acmode' method='POST'>
+            <button type="submit">AC/Heat</button>
+        </form>
+    </div>
+</div>
+</body>
+</html>
