@@ -144,7 +144,7 @@ func fatal(message string, err error) {
 
 func main() {
 	binding := flag.String("binding", ":8888", "http binding")
-	config := flag.String("lirccfg", "", "lirc config")
+	config := flag.String("lirccfg", "BRYANT", "lirc config")
 	cache := flag.String("cache", "/var/cache/temperature", "cache directory")
 	device := flag.String("device", "/run/lirc/lircd", "lircd device")
 	irSend := flag.String("irsend", "/usr/bin/irsend", "irsend executable")
