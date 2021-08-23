@@ -13,6 +13,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"voidedtech.com/stock"
 )
 
 var (
@@ -66,7 +68,7 @@ type (
 func doScheduled(ctx context) error {
 	lock.Lock()
 	defer lock.Unlock()
-	if !exists(ctx.schedule) {
+	if !stock.PathExists(ctx.schedule) {
 		return nil
 	}
 	b, err := os.ReadFile(ctx.schedule)
@@ -90,15 +92,15 @@ func schedulerDaemon(ctx context) {
 		time.Sleep(5 * time.Second)
 		now := time.Now()
 		if now.Day() != today.Day() {
-			if exists(ctx.lock) {
+			if stock.PathExists(ctx.lock) {
 				if err := os.Remove(ctx.lock); err != nil {
-					onError("unable to remove lock", err)
+					stock.LogError("unable to remove lock", err)
 				}
 			}
 		}
-		if !exists(ctx.hold) {
+		if !stock.PathExists(ctx.hold) {
 			if err := doScheduled(ctx); err != nil {
-				onError("scheduler failed", err)
+				stock.LogError("scheduler failed", err)
 			}
 		}
 		today = now
@@ -113,18 +115,9 @@ func newScheduleTime(hr, min int, action string) scheduleTime {
 	return scheduleTime{hour: hr, min: min, action: action}
 }
 
-func exists(path string) bool {
-	if _, err := os.Stat(path); err != nil {
-		if os.IsNotExist(err) {
-			return false
-		}
-	}
-	return true
-}
-
 func (ctx context) mode(start bool) string {
 	op := "HEAT"
-	if exists(ctx.modeAC) {
+	if stock.PathExists(ctx.modeAC) {
 		op = "AC"
 	}
 	postfix := "STOP"
@@ -132,19 +125,6 @@ func (ctx context) mode(start bool) string {
 		postfix = "START"
 	}
 	return fmt.Sprintf("%s%s", op, postfix)
-}
-
-func onError(message string, err error) {
-	errorText := ""
-	if err != nil {
-		errorText = fmt.Sprintf(" (%v)", err)
-	}
-	fmt.Printf("%s%s\n", message, errorText)
-}
-
-func fatal(message string, err error) {
-	onError(message, err)
-	os.Exit(1)
 }
 
 func main() {
@@ -156,9 +136,9 @@ func main() {
 	flag.Parse()
 	ctx := context{}
 	library := *lib
-	if !exists(library) {
+	if !stock.PathExists(library) {
 		if err := os.MkdirAll(library, 0755); err != nil {
-			fatal("unable to make library dir", err)
+			stock.Die("unable to make library dir", err)
 		}
 	}
 	ctx.modeAC = filepath.Join(library, "acmode")
@@ -171,12 +151,12 @@ func main() {
 	ctx.running = filepath.Join(library, "running")
 	tmpl, err := template.New("error").Parse("<html><body>{{ .Error }}</body></html>")
 	if err != nil {
-		fatal("invalid template for errors", err)
+		stock.Die("invalid template for errors", err)
 	}
 	ctx.errorTemplate = tmpl
 	page, err := template.New("page").Parse(templateHTML)
 	if err != nil {
-		fatal("unable to read html template", err)
+		stock.Die("unable to read html template", err)
 	}
 	ctx.pageTemplate = page
 	go schedulerDaemon(ctx)
@@ -190,13 +170,13 @@ func write(path string) error {
 func act(action string, isChange bool, req *http.Request, ctx context) error {
 	webRequest := req != nil
 	canChange := true
-	if exists(ctx.lock) && !webRequest {
+	if stock.PathExists(ctx.lock) && !webRequest {
 		canChange = false
 	}
 	if isChange {
 		switch action {
 		case "calibrate":
-			if exists(ctx.running) {
+			if stock.PathExists(ctx.running) {
 				if err := os.Remove(ctx.running); err != nil {
 					return err
 				}
@@ -213,14 +193,14 @@ func act(action string, isChange bool, req *http.Request, ctx context) error {
 			if canChange {
 				actuating := false
 				if isOn {
-					if !exists(ctx.running) {
+					if !stock.PathExists(ctx.running) {
 						if err := write(ctx.running); err != nil {
 							return err
 						}
 						actuating = true
 					}
 				} else {
-					if exists(ctx.running) {
+					if stock.PathExists(ctx.running) {
 						if err := os.Remove(ctx.running); err != nil {
 							return err
 						}
@@ -234,7 +214,7 @@ func act(action string, isChange bool, req *http.Request, ctx context) error {
 				}
 			}
 		case "togglelock":
-			if exists(ctx.lock) {
+			if stock.PathExists(ctx.lock) {
 				if err := os.Remove(ctx.lock); err != nil {
 					return err
 				}
@@ -265,7 +245,7 @@ func act(action string, isChange bool, req *http.Request, ctx context) error {
 					return err
 				}
 			} else {
-				if exists(ctx.hold) {
+				if stock.PathExists(ctx.hold) {
 					if err := os.Remove(ctx.hold); err != nil {
 						return err
 					}
@@ -275,7 +255,7 @@ func act(action string, isChange bool, req *http.Request, ctx context) error {
 				return err
 			}
 		case "acmode":
-			if exists(ctx.modeAC) {
+			if stock.PathExists(ctx.modeAC) {
 				if err := os.Remove(ctx.modeAC); err != nil {
 					return err
 				}
@@ -285,7 +265,7 @@ func act(action string, isChange bool, req *http.Request, ctx context) error {
 				}
 			}
 		default:
-			onError(fmt.Sprintf("unknown action: %s", action), nil)
+			stock.LogError(fmt.Sprintf("unknown action: %s", action), nil)
 			return nil
 		}
 		return nil
@@ -349,7 +329,7 @@ func (ctx context) lockNow(canLock bool) error {
 }
 
 func setYes(path string) string {
-	if exists(path) {
+	if stock.PathExists(path) {
 		return "YES"
 	}
 	return "NO"
@@ -357,7 +337,7 @@ func setYes(path string) string {
 
 func doTemplate(w http.ResponseWriter, tmpl *template.Template, obj Result) {
 	if err := tmpl.Execute(w, obj); err != nil {
-		onError("unable to execute template", err)
+		stock.LogError("unable to execute template", err)
 	}
 }
 
@@ -366,7 +346,7 @@ func doActionCall(w http.ResponseWriter, r *http.Request, ctx context) {
 	defer lock.Unlock()
 	parts := strings.Split(r.URL.String(), "/")
 	if len(parts) != 3 {
-		onError("invalid action, not given", nil)
+		stock.LogError("invalid action, not given", nil)
 		return
 	}
 	action := parts[2]
@@ -386,10 +366,10 @@ func doActionCall(w http.ResponseWriter, r *http.Request, ctx context) {
 	result.Mode = setYes(ctx.lock)
 	result.Hold = setYes(ctx.hold)
 	schedule := ""
-	if exists(ctx.schedule) {
+	if stock.PathExists(ctx.schedule) {
 		b, err := os.ReadFile(ctx.schedule)
 		if err != nil {
-			onError("unable to read schedule", err)
+			stock.LogError("unable to read schedule", err)
 			return
 		}
 		schedule = strings.TrimSpace(string(b))
@@ -397,7 +377,7 @@ func doActionCall(w http.ResponseWriter, r *http.Request, ctx context) {
 	result.Schedule = schedule
 	result.Time = time.Now().Format("2006-01-02T15:04:05")
 	acMode := "HEAT"
-	if exists(ctx.modeAC) {
+	if stock.PathExists(ctx.modeAC) {
 		acMode = "A/C"
 	}
 	result.System = acMode
@@ -410,7 +390,7 @@ func host(binding string, ctx context) {
 	})
 
 	if err := http.ListenAndServe(binding, nil); err != nil {
-		onError("listen and server", err)
+		stock.LogError("listen and server", err)
 	}
 }
 
