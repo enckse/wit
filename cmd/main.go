@@ -128,7 +128,7 @@ func (ctx context) mode(start bool) string {
 }
 
 func main() {
-	binding := flag.String("binding", ":8888", "http binding")
+	binding := flag.String("binding", ":7802", "http binding")
 	config := flag.String("lirccfg", "BRYANT", "lirc config")
 	lib := flag.String("cache", "/var/lib/wit", "cache directory")
 	device := flag.String("device", "/run/lirc/lircd", "lircd device")
