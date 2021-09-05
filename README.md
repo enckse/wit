@@ -9,4 +9,5 @@ receiver to communicate to a mini-split.
 Features:
 - Daily schedule
 - Daily hold, vacation
-- See [here](configs/README.md) on how IR communication was setup and is done with a bryant minisplit
+
+_Works with a Bryant minisplit_
