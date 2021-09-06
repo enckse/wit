@@ -3,5 +3,5 @@ WEB := $(BIN)wit
 
 all: $(WEB)
 
-$(WEB): $(shell find cmd/ -type f)
+$(WEB): $(shell find . -type f -name "*.go")
 	go build -o $@ cmd/main.go
