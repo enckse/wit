@@ -18,7 +18,7 @@ func main() {
 	flag.Parse()
 	cfg := serve.NewConfig(*config, *lib, *device, *irSend)
 	mux := http.NewServeMux()
-	if err := serve.SetupServer(mux, cfg); err != nil {
+	if err := cfg.SetupServer(mux); err != nil {
 		stock.Die("failed to setup server", err)
 	}
 	srv := &http.Server{

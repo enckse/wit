@@ -144,7 +144,7 @@ func (ctx context) mode(start bool) string {
 }
 
 // SetupServer will prepare the wit server.
-func SetupServer(mux *http.ServeMux, cfg Config) error {
+func (cfg Config) SetupServer(mux *http.ServeMux) error {
 	ctx := context{}
 	library := cfg.cache
 	if !stock.PathExists(library) {
