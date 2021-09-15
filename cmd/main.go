@@ -8,14 +8,18 @@ import (
 	"voidedtech.com/wit/serve"
 )
 
+var (
+	version = "development"
+)
+
 func main() {
-	binding := flag.String("binding", ":7802", "http binding")
+	binding := flag.String("binding", ":7801", "http binding")
 	config := flag.String("lirccfg", "BRYANT", "lirc config")
 	lib := flag.String("cache", "/var/lib/wit", "cache directory")
 	device := flag.String("device", "/run/lirc/lircd", "lircd device")
 	irSend := flag.String("irsend", "/usr/bin/irsend", "irsend executable")
 	flag.Parse()
-	cfg := serve.NewConfig(*config, *lib, *device, *irSend)
+	cfg := serve.NewConfig(*config, *lib, *device, *irSend, version)
 	mux := http.NewServeMux()
 	if err := cfg.SetupServer(mux); err != nil {
 		stock.Die("failed to setup server", err)

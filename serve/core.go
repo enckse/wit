@@ -40,6 +40,7 @@ type (
 		Hold     string
 		Mode     string
 		Schedule string
+		Build    string
 	}
 	scheduleTime struct {
 		hour   int
@@ -55,6 +56,7 @@ type (
 		schedule      string
 		hold          string
 		running       string
+		version       string
 		pageTemplate  *template.Template
 		errorTemplate *template.Template
 	}
@@ -68,16 +70,18 @@ type (
 		cache      string
 		device     string
 		irSend     string
+		version    string
 	}
 )
 
 // NewConfig will create a new configuration.
-func NewConfig(configFile, cache, device, irSend string) Config {
+func NewConfig(configFile, cache, device, irSend, vers string) Config {
 	return Config{
 		configFile: configFile,
 		cache:      cache,
 		device:     device,
 		irSend:     irSend,
+		version:    vers,
 	}
 }
 
@@ -156,6 +160,7 @@ func (cfg Config) SetupServer(mux *http.ServeMux) error {
 	ctx.device = cfg.device
 	ctx.sendIR = cfg.irSend
 	ctx.configFile = cfg.configFile
+	ctx.version = cfg.version
 	ctx.lock = filepath.Join(library, "lock")
 	ctx.schedule = filepath.Join(library, "schedule")
 	ctx.hold = filepath.Join(library, "hold")
@@ -390,6 +395,7 @@ func doActionCall(w http.ResponseWriter, r *http.Request, ctx context) {
 		schedule = strings.TrimSpace(string(b))
 	}
 	result.Schedule = schedule
+	result.Build = ctx.version
 	result.Time = time.Now().Format("2006-01-02T15:04:05")
 	acMode := "HEAT"
 	if stock.PathExists(ctx.modeAC) {

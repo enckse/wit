@@ -49,6 +49,11 @@ textarea {
 #trigger:checked + .box {
   display: block;
 }
+
+.footer {
+    font-size: 8px;
+    font-style: italic;
+}
 </style>
 <title>wit</title>
 </head>
@@ -98,6 +103,9 @@ textarea {
             <button type="submit">AC/Heat</button>
         </form>
     </div>
+<div class="footer">
+    Version: {{ .Build }}
+</div>
 </div>
 </body>
 </html>
