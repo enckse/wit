@@ -4,7 +4,7 @@ FLAGS := -ldflags "-X main.version=$(shell git log -n 1 --format=%h)" -trimpath 
 
 all: $(WEB)
 
-$(WEB): $(shell find . -type f -name "*.go")
+$(WEB): cmd/* serve/*
 	go build $(FLAGS) -o $@ cmd/main.go
 
 clean:
