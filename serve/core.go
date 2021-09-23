@@ -37,7 +37,7 @@ type (
 		Running  string
 		System   string
 		Time     string
-		Hold     string
+		Manual   string
 		Mode     string
 		Schedule string
 		Build    string
@@ -54,7 +54,7 @@ type (
 		configFile    string
 		lock          string
 		schedule      string
-		hold          string
+		manual        string
 		running       string
 		version       string
 		pageTemplate  *template.Template
@@ -118,7 +118,7 @@ func schedulerDaemon(ctx context) {
 				}
 			}
 		}
-		if !stock.PathExists(ctx.hold) {
+		if !stock.PathExists(ctx.manual) {
 			if err := doScheduled(ctx); err != nil {
 				stock.LogError("scheduler failed", err)
 			}
@@ -163,7 +163,7 @@ func (cfg Config) SetupServer(mux *http.ServeMux) error {
 	ctx.version = cfg.version
 	ctx.lock = filepath.Join(library, "lock")
 	ctx.schedule = filepath.Join(library, "schedule")
-	ctx.hold = filepath.Join(library, "hold")
+	ctx.manual = filepath.Join(library, "manual")
 	ctx.running = filepath.Join(library, "running")
 	tmpl, err := template.New("error").Parse("<html><body>{{ .Error }}</body></html>")
 	if err != nil {
@@ -247,12 +247,12 @@ func act(action string, isChange bool, req *http.Request, ctx context) error {
 			if err := req.ParseForm(); err != nil {
 				return err
 			}
-			holding := false
+			isManual := false
 			schedule := ""
 			for k, v := range req.Form {
 				switch k {
-				case "hold":
-					holding = true
+				case "manual":
+					isManual = true
 				case "sched":
 					schedule = strings.Join(v, "\n")
 					if _, err := parseSchedule(schedule); err != nil {
@@ -260,13 +260,13 @@ func act(action string, isChange bool, req *http.Request, ctx context) error {
 					}
 				}
 			}
-			if holding {
-				if err := write(ctx.hold); err != nil {
+			if isManual {
+				if err := write(ctx.manual); err != nil {
 					return err
 				}
 			} else {
-				if stock.PathExists(ctx.hold) {
-					if err := os.Remove(ctx.hold); err != nil {
+				if stock.PathExists(ctx.manual) {
+					if err := os.Remove(ctx.manual); err != nil {
 						return err
 					}
 				}
@@ -384,7 +384,7 @@ func doActionCall(w http.ResponseWriter, r *http.Request, ctx context) {
 	result := Result{}
 	result.Running = setYes(ctx.running)
 	result.Mode = setYes(ctx.lock)
-	result.Hold = setYes(ctx.hold)
+	result.Manual = setYes(ctx.manual)
 	schedule := ""
 	if stock.PathExists(ctx.schedule) {
 		b, err := os.ReadFile(ctx.schedule)

@@ -75,7 +75,7 @@ textarea {
     <hr />
     <table>
         <tr><td>Override:</td><td><b>{{ .Mode }}</b></td></tr>
-        <tr><td>Hold:</td><td><b>{{ .Hold }}</b></td></tr>
+        <tr><td>Manual:</td><td><b>{{ .Manual }}</b></td></tr>
     </table>
     <br />
     <form action='/wit/togglelock' method='POST'>
@@ -88,8 +88,8 @@ textarea {
         <form action='/wit/schedule' method='POST'>
             <textarea id="sched" name="sched">{{ .Schedule }}</textarea>
             <br />
-            Hold:
-            <input type="checkbox" name="hold"/>
+            Manual:
+            <input type="checkbox" name="manual"/>
             <input type="submit" value="Set Schedule" />
         </form>
         <br />

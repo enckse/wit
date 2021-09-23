@@ -8,6 +8,6 @@ receiver to communicate to a mini-split.
 
 Features:
 - Daily schedule
-- Daily hold, vacation
+- Daily hold, vacation, manual-mode (no-op)
 
 _Works with a Bryant minisplit_
