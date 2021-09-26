@@ -39,7 +39,7 @@ type (
 		System   string
 		Time     string
 		Manual   string
-		Mode     string
+		Override string
 		Schedule string
 		Build    string
 	}
@@ -388,7 +388,7 @@ func doActionCall(w http.ResponseWriter, r *http.Request, ctx context) {
 		return
 	}
 	result.Running = setYes(state.Running)
-	result.Mode = setYes(state.ACMode)
+	result.Override = setYes(state.Override)
 	result.Manual = setYes(state.Manual)
 	schedule := state.Schedule
 	result.Schedule = schedule
