@@ -206,8 +206,10 @@ func act(action string, isChange bool, req *http.Request, ctx context) error {
 				}
 			}
 		case onAction, offAction:
-			if err := ctx.lockNow(webRequest); err != nil {
-				return err
+			if !stock.PathExists(ctx.manual) {
+				if err := ctx.lockNow(webRequest); err != nil {
+					return err
+				}
 			}
 			isOn := action == onAction
 			if canChange {
