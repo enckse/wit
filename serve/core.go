@@ -119,8 +119,6 @@ func (ctx context) setState(s *State) error {
 }
 
 func doScheduled(ctx context) error {
-	lock.Lock()
-	defer lock.Unlock()
 	state, err := ctx.getState()
 	if err != nil {
 		return err
@@ -366,8 +364,6 @@ func doTemplate(w http.ResponseWriter, tmpl *template.Template, obj Result) {
 }
 
 func doActionCall(w http.ResponseWriter, r *http.Request, ctx context) {
-	lock.Lock()
-	defer lock.Unlock()
 	parts := strings.Split(r.URL.String(), "/")
 	if len(parts) != 3 {
 		stock.LogError("invalid action, not given", nil)
