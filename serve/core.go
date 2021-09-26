@@ -141,7 +141,7 @@ func schedulerDaemon(ctx context) {
 		now := time.Now()
 		state, err := ctx.getState()
 		if err == nil {
-			if now.Day() != today.Day() {
+			if now.Day() != today.Day() || state.Manual {
 				if state.Override {
 					state.Override = false
 					if err := ctx.setState(state); err != nil {
