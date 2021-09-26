@@ -2,6 +2,7 @@ package serve
 
 import (
 	_ "embed"
+	"encoding/json"
 	"fmt"
 	"html/template"
 	"net/http"
@@ -48,15 +49,11 @@ type (
 		action string
 	}
 	context struct {
-		modeAC        string
 		sendIR        string
 		device        string
 		configFile    string
-		lock          string
-		schedule      string
-		manual        string
-		running       string
 		version       string
+		stateFile     string
 		pageTemplate  *template.Template
 		errorTemplate *template.Template
 	}
@@ -72,6 +69,15 @@ type (
 		irSend     string
 		version    string
 	}
+
+	// State represents on the current system state to persist to disk.
+	State struct {
+		ACMode   bool
+		Schedule string
+		Manual   bool
+		Override bool
+		Running  bool
+	}
 )
 
 // NewConfig will create a new configuration.
@@ -85,17 +91,41 @@ func NewConfig(configFile, cache, device, irSend, vers string) Config {
 	}
 }
 
-func doScheduled(ctx context) error {
+func (ctx context) getState() (*State, error) {
 	lock.Lock()
 	defer lock.Unlock()
-	if !stock.PathExists(ctx.schedule) {
-		return nil
+	if !stock.PathExists(ctx.stateFile) {
+		return &State{}, nil
 	}
-	b, err := os.ReadFile(ctx.schedule)
+	b, err := os.ReadFile(ctx.stateFile)
+	if err != nil {
+		return nil, err
+	}
+	obj := &State{}
+	if err := json.Unmarshal(b, &obj); err != nil {
+		return nil, err
+	}
+	return obj, nil
+}
+
+func (ctx context) setState(s *State) error {
+	lock.Lock()
+	defer lock.Unlock()
+	b, err := json.Marshal(s)
 	if err != nil {
 		return err
 	}
-	action, err := parseSchedule(string(b))
+	return os.WriteFile(ctx.stateFile, b, 0644)
+}
+
+func doScheduled(ctx context) error {
+	lock.Lock()
+	defer lock.Unlock()
+	state, err := ctx.getState()
+	if err != nil {
+		return err
+	}
+	action, err := parseSchedule(state.Schedule)
 	if err != nil {
 		return err
 	}
@@ -111,17 +141,23 @@ func schedulerDaemon(ctx context) {
 	for {
 		time.Sleep(5 * time.Second)
 		now := time.Now()
-		if now.Day() != today.Day() {
-			if stock.PathExists(ctx.lock) {
-				if err := os.Remove(ctx.lock); err != nil {
-					stock.LogError("unable to remove lock", err)
+		state, err := ctx.getState()
+		if err == nil {
+			if now.Day() != today.Day() {
+				if state.Override {
+					state.Override = false
+					if err := ctx.setState(state); err != nil {
+						stock.LogError("unable to writeback override disable", err)
+					}
 				}
 			}
-		}
-		if !stock.PathExists(ctx.manual) {
-			if err := doScheduled(ctx); err != nil {
-				stock.LogError("scheduler failed", err)
+			if !state.Manual {
+				if err := doScheduled(ctx); err != nil {
+					stock.LogError("scheduler failed", err)
+				}
 			}
+		} else {
+			stock.LogError("unable to read state", err)
 		}
 		today = now
 	}
@@ -135,9 +171,9 @@ func newScheduleTime(hr, min int, action string) scheduleTime {
 	return scheduleTime{hour: hr, min: min, action: action}
 }
 
-func (ctx context) mode(start bool) string {
+func (ctx context) mode(isAC, start bool) string {
 	op := "HEAT"
-	if stock.PathExists(ctx.modeAC) {
+	if isAC {
 		op = "AC"
 	}
 	postfix := "STOP"
@@ -156,15 +192,11 @@ func (cfg Config) SetupServer(mux *http.ServeMux) error {
 			stock.Die("unable to make library dir", err)
 		}
 	}
-	ctx.modeAC = filepath.Join(library, "acmode")
 	ctx.device = cfg.device
 	ctx.sendIR = cfg.irSend
 	ctx.configFile = cfg.configFile
 	ctx.version = cfg.version
-	ctx.lock = filepath.Join(library, "lock")
-	ctx.schedule = filepath.Join(library, "schedule")
-	ctx.manual = filepath.Join(library, "manual")
-	ctx.running = filepath.Join(library, "running")
+	ctx.stateFile = filepath.Join(library, "state.json")
 	tmpl, err := template.New("error").Parse("<html><body>{{ .Error }}</body></html>")
 	if err != nil {
 		stock.Die("invalid template for errors", err)
@@ -183,67 +215,58 @@ func (cfg Config) SetupServer(mux *http.ServeMux) error {
 	return nil
 }
 
-func write(path string) error {
-	return os.WriteFile(path, []byte(""), 0644)
-}
-
 func act(action string, isChange bool, req *http.Request, ctx context) error {
 	webRequest := req != nil
 	canChange := true
-	if stock.PathExists(ctx.lock) && !webRequest {
+	state, err := ctx.getState()
+	if err != nil {
+		return err
+	}
+	if state.Override && !webRequest {
 		canChange = false
 	}
 	if isChange {
 		switch action {
 		case "calibrate":
-			if stock.PathExists(ctx.running) {
-				if err := os.Remove(ctx.running); err != nil {
-					return err
-				}
-			} else {
-				if err := write(ctx.running); err != nil {
-					return err
-				}
+			state.Running = !state.Running
+			if err := ctx.setState(state); err != nil {
+				return err
 			}
 		case onAction, offAction:
-			if !stock.PathExists(ctx.manual) {
-				if err := ctx.lockNow(webRequest); err != nil {
-					return err
+			if !state.Manual {
+				if webRequest {
+					state.Override = true
+					if err := ctx.setState(state); err != nil {
+						return err
+					}
 				}
 			}
 			isOn := action == onAction
 			if canChange {
 				actuating := false
 				if isOn {
-					if !stock.PathExists(ctx.running) {
-						if err := write(ctx.running); err != nil {
-							return err
-						}
+					if !state.Running {
 						actuating = true
 					}
 				} else {
-					if stock.PathExists(ctx.running) {
-						if err := os.Remove(ctx.running); err != nil {
-							return err
-						}
+					if state.Running {
 						actuating = true
 					}
 				}
 				if actuating {
-					if err := ctx.actuate(ctx.mode(isOn)); err != nil {
+					if err := ctx.actuate(ctx.mode(state.ACMode, isOn)); err != nil {
+						return err
+					}
+					state.Running = !state.Running
+					if err := ctx.setState(state); err != nil {
 						return err
 					}
 				}
 			}
 		case "togglelock":
-			if stock.PathExists(ctx.lock) {
-				if err := os.Remove(ctx.lock); err != nil {
-					return err
-				}
-			} else {
-				if err := write(ctx.lock); err != nil {
-					return err
-				}
+			state.Override = !state.Override
+			if err := ctx.setState(state); err != nil {
+				return err
 			}
 		case "schedule":
 			if err := req.ParseForm(); err != nil {
@@ -262,29 +285,15 @@ func act(action string, isChange bool, req *http.Request, ctx context) error {
 					}
 				}
 			}
-			if isManual {
-				if err := write(ctx.manual); err != nil {
-					return err
-				}
-			} else {
-				if stock.PathExists(ctx.manual) {
-					if err := os.Remove(ctx.manual); err != nil {
-						return err
-					}
-				}
-			}
-			if err := os.WriteFile(ctx.schedule, []byte(schedule), 0644); err != nil {
+			state.Manual = isManual
+			state.Schedule = strings.TrimSpace(schedule)
+			if err := ctx.setState(state); err != nil {
 				return err
 			}
 		case "acmode":
-			if stock.PathExists(ctx.modeAC) {
-				if err := os.Remove(ctx.modeAC); err != nil {
-					return err
-				}
-			} else {
-				if err := write(ctx.modeAC); err != nil {
-					return err
-				}
+			state.ACMode = !state.ACMode
+			if err := ctx.setState(state); err != nil {
+				return err
 			}
 		default:
 			stock.LogError(fmt.Sprintf("unknown action: %s", action), nil)
@@ -343,15 +352,8 @@ func parseSchedule(schedule string) (string, error) {
 	return match, nil
 }
 
-func (ctx context) lockNow(canLock bool) error {
-	if canLock {
-		return write(ctx.lock)
-	}
-	return nil
-}
-
-func setYes(path string) string {
-	if stock.PathExists(path) {
+func setYes(toggled bool) string {
+	if toggled {
 		return "YES"
 	}
 	return "NO"
@@ -384,23 +386,20 @@ func doActionCall(w http.ResponseWriter, r *http.Request, ctx context) {
 		return
 	}
 	result := Result{}
-	result.Running = setYes(ctx.running)
-	result.Mode = setYes(ctx.lock)
-	result.Manual = setYes(ctx.manual)
-	schedule := ""
-	if stock.PathExists(ctx.schedule) {
-		b, err := os.ReadFile(ctx.schedule)
-		if err != nil {
-			stock.LogError("unable to read schedule", err)
-			return
-		}
-		schedule = strings.TrimSpace(string(b))
+	state, err := ctx.getState()
+	if err != nil {
+		doTemplate(w, ctx.errorTemplate, Result{Error: fmt.Sprintf("%v", err)})
+		return
 	}
+	result.Running = setYes(state.Running)
+	result.Mode = setYes(state.ACMode)
+	result.Manual = setYes(state.Manual)
+	schedule := state.Schedule
 	result.Schedule = schedule
 	result.Build = ctx.version
 	result.Time = time.Now().Format("2006-01-02T15:04:05")
 	acMode := "HEAT"
-	if stock.PathExists(ctx.modeAC) {
+	if state.ACMode {
 		acMode = "A/C"
 	}
 	result.System = acMode
