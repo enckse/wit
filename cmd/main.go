@@ -19,7 +19,7 @@ func main() {
 	lib := flag.String("cache", "/var/lib/wit", "cache directory")
 	device := flag.String("device", "/run/lirc/lircd", "lircd device")
 	irSend := flag.String("irsend", "/usr/bin/irsend", "irsend executable")
-	opModes := flag.String("opmodes", "AC,HEAT", "operation modes")
+	opModes := flag.String("opmodes", "COOL74,HEAT74", "operation modes")
 	flag.Parse()
 	cfg := serve.NewConfig(*config, *lib, *device, *irSend, version, strings.Split(*opModes, ","))
 	mux := http.NewServeMux()
