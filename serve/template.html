@@ -90,7 +90,9 @@ textarea {
             <br />
             Manual:
             <input type="checkbox" name="manual"/>
-            <select id="opmode">
+            Operating Mode:
+            <br />
+            <select id="opmode" name="opmode">
                 <option value="noop">N/A</option>
                 {{range $val := .OperationModes}}
                     <option value="{{ $val }}">{{ $val }}</option>
