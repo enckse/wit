@@ -3,6 +3,7 @@ package main
 import (
 	"flag"
 	"net/http"
+	"strings"
 
 	"voidedtech.com/stock"
 	"voidedtech.com/wit/serve"
@@ -18,8 +19,9 @@ func main() {
 	lib := flag.String("cache", "/var/lib/wit", "cache directory")
 	device := flag.String("device", "/run/lirc/lircd", "lircd device")
 	irSend := flag.String("irsend", "/usr/bin/irsend", "irsend executable")
+	opModes := flag.String("opmodes", "AC,HEAT", "operation modes")
 	flag.Parse()
-	cfg := serve.NewConfig(*config, *lib, *device, *irSend, version)
+	cfg := serve.NewConfig(*config, *lib, *device, *irSend, version, strings.Split(*opModes, ","))
 	mux := http.NewServeMux()
 	if err := cfg.SetupServer(mux); err != nil {
 		stock.Die("failed to setup server", err)

@@ -90,17 +90,18 @@ textarea {
             <br />
             Manual:
             <input type="checkbox" name="manual"/>
+            <select id="opmode">
+                <option value="noop">N/A</option>
+                {{range $val := .OperationModes}}
+                    <option value="{{ $val }}">{{ $val }}</option>
+                {{end}}
+            </select>
             <input type="submit" value="Set Schedule" />
         </form>
         <br />
         <br />
         <form action='/wit/calibrate' method='POST'>
             <button type="submit">Calibrate</button>
-        </form>
-        <br />
-        <br />
-        <form action='/wit/acmode' method='POST'>
-            <button type="submit">AC/Heat</button>
         </form>
     </div>
 <div class="footer">

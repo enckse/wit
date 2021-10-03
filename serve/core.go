@@ -34,14 +34,15 @@ const (
 type (
 	// Result is how html results are shown.
 	Result struct {
-		Error    string
-		Running  string
-		System   string
-		Time     string
-		Manual   string
-		Override string
-		Schedule string
-		Build    string
+		Error          string
+		Running        string
+		System         string
+		Time           string
+		Manual         string
+		Override       string
+		Schedule       string
+		Build          string
+		OperationModes []string
 	}
 	scheduleTime struct {
 		hour   int
@@ -49,9 +50,7 @@ type (
 		action string
 	}
 	context struct {
-		sendIR        string
-		device        string
-		configFile    string
+		cfg           Config
 		version       string
 		stateFile     string
 		pageTemplate  *template.Template
@@ -68,11 +67,12 @@ type (
 		device     string
 		irSend     string
 		version    string
+		opModes    []string
 	}
 
 	// State represents on the current system state to persist to disk.
 	State struct {
-		ACMode   bool
+		OpMode   string
 		Schedule string
 		Manual   bool
 		Override bool
@@ -81,13 +81,14 @@ type (
 )
 
 // NewConfig will create a new configuration.
-func NewConfig(configFile, cache, device, irSend, vers string) Config {
+func NewConfig(configFile, cache, device, irSend, vers string, opModes []string) Config {
 	return Config{
 		configFile: configFile,
 		cache:      cache,
 		device:     device,
 		irSend:     irSend,
 		version:    vers,
+		opModes:    opModes,
 	}
 }
 
@@ -169,11 +170,8 @@ func newScheduleTime(hr, min int, action string) scheduleTime {
 	return scheduleTime{hour: hr, min: min, action: action}
 }
 
-func (ctx context) mode(isAC, start bool) string {
-	op := "HEAT"
-	if isAC {
-		op = "AC"
-	}
+func (ctx context) mode(targetMode string, start bool) string {
+	op := targetMode
 	postfix := "STOP"
 	if start {
 		postfix = "START"
@@ -190,9 +188,7 @@ func (cfg Config) SetupServer(mux *http.ServeMux) error {
 			stock.Die("unable to make library dir", err)
 		}
 	}
-	ctx.device = cfg.device
-	ctx.sendIR = cfg.irSend
-	ctx.configFile = cfg.configFile
+	ctx.cfg = cfg
 	ctx.version = cfg.version
 	ctx.stateFile = filepath.Join(library, "state.json")
 	tmpl, err := template.New("error").Parse("<html><body>{{ .Error }}</body></html>")
@@ -252,7 +248,7 @@ func act(action string, isChange bool, req *http.Request, ctx context) error {
 					}
 				}
 				if actuating {
-					if err := ctx.actuate(ctx.mode(state.ACMode, isOn)); err != nil {
+					if err := ctx.actuate(ctx.mode(state.OpMode, isOn)); err != nil {
 						return err
 					}
 					state.Running = !state.Running
@@ -274,6 +270,11 @@ func act(action string, isChange bool, req *http.Request, ctx context) error {
 			schedule := ""
 			for k, v := range req.Form {
 				switch k {
+				case "opmode":
+					selectedMode := strings.TrimSpace(strings.Join(v, ""))
+					if selectedMode != "noop" {
+						state.OpMode = selectedMode
+					}
 				case "manual":
 					isManual = true
 				case "sched":
@@ -285,11 +286,6 @@ func act(action string, isChange bool, req *http.Request, ctx context) error {
 			}
 			state.Manual = isManual
 			state.Schedule = strings.TrimSpace(schedule)
-			if err := ctx.setState(state); err != nil {
-				return err
-			}
-		case "acmode":
-			state.ACMode = !state.ACMode
 			if err := ctx.setState(state); err != nil {
 				return err
 			}
@@ -390,18 +386,16 @@ func doActionCall(w http.ResponseWriter, r *http.Request, ctx context) {
 	result.Running = setYes(state.Running)
 	result.Override = setYes(state.Override)
 	result.Manual = setYes(state.Manual)
+	result.OperationModes = ctx.cfg.opModes
 	schedule := state.Schedule
 	result.Schedule = schedule
 	result.Build = ctx.version
 	result.Time = time.Now().Format("2006-01-02T15:04:05")
-	acMode := "HEAT"
-	if state.ACMode {
-		acMode = "A/C"
-	}
+	acMode := state.OpMode
 	result.System = acMode
 	doTemplate(w, ctx.pageTemplate, result)
 }
 
 func (ctx context) actuate(mode string) error {
-	return exec.Command(ctx.sendIR, fmt.Sprintf("--device=%s", ctx.device), "SEND_ONCE", ctx.configFile, mode).Run()
+	return exec.Command(ctx.cfg.irSend, fmt.Sprintf("--device=%s", ctx.cfg.device), "SEND_ONCE", ctx.cfg.configFile, mode).Run()
 }
