@@ -56,10 +56,6 @@ type (
 		pageTemplate  *template.Template
 		errorTemplate *template.Template
 	}
-	// ThermError are all web therm errors.
-	ThermError struct {
-		message string
-	}
 	// Config handles wit configuration.
 	Config struct {
 		configFile string
@@ -160,10 +156,6 @@ func schedulerDaemon(ctx context) {
 		}
 		today = now
 	}
-}
-
-func (t *ThermError) Error() string {
-	return t.message
 }
 
 func newScheduleTime(hr, min int, action string) scheduleTime {
@@ -308,25 +300,25 @@ func parseSchedule(schedule string) (string, error) {
 		}
 		parts := strings.Split(strings.TrimSpace(line), " ")
 		if len(parts) != 3 {
-			return "", &ThermError{"invalid schedule line, should be 'min hour action'"}
+			return "", stock.NewBasicError("invalid schedule line, should be 'min hour action'")
 		}
 		toggle := parts[2]
 		if toggle != onAction && toggle != offAction {
-			return "", &ThermError{"schedule can only be 'on' or 'off'"}
+			return "", stock.NewBasicError("schedule can only be 'on' or 'off'")
 		}
 		hour, err := strconv.Atoi(parts[1])
 		if err != nil {
 			return "", err
 		}
 		if hour < 0 || hour > 23 {
-			return "", &ThermError{"hour is invalid"}
+			return "", stock.NewBasicError("hour is invalid")
 		}
 		min, err := strconv.Atoi(parts[0])
 		if err != nil {
 			return "", err
 		}
 		if min < 0 || min > 59 {
-			return "", &ThermError{"minute is invalid"}
+			return "", stock.NewBasicError("minute is invalid")
 		}
 		lineTrack := newScheduleTime(hour, min, toggle)
 		timings = append(timings, lineTrack)
