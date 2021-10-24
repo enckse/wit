@@ -43,6 +43,8 @@ type (
 		Schedule       string
 		Build          string
 		OperationModes []string
+		HasReturn      bool
+		ReturnTo       string
 	}
 	scheduleTime struct {
 		hour   int
@@ -64,6 +66,7 @@ type (
 		irSend     string
 		version    string
 		opModes    []string
+		returnURL  string
 	}
 
 	// State represents on the current system state to persist to disk.
@@ -77,7 +80,7 @@ type (
 )
 
 // NewConfig will create a new configuration.
-func NewConfig(configFile, cache, device, irSend, vers string, opModes []string) Config {
+func NewConfig(configFile, cache, device, irSend, vers, returnURL string, opModes []string) Config {
 	return Config{
 		configFile: configFile,
 		cache:      cache,
@@ -85,6 +88,7 @@ func NewConfig(configFile, cache, device, irSend, vers string, opModes []string)
 		irSend:     irSend,
 		version:    vers,
 		opModes:    opModes,
+		returnURL:  returnURL,
 	}
 }
 
@@ -385,6 +389,8 @@ func doActionCall(w http.ResponseWriter, r *http.Request, ctx context) {
 	result.Time = time.Now().Format("2006-01-02T15:04:05")
 	acMode := state.OpMode
 	result.System = acMode
+	result.HasReturn = len(ctx.cfg.returnURL) > 0
+	result.ReturnTo = ctx.cfg.returnURL
 	doTemplate(w, ctx.pageTemplate, result)
 }
 

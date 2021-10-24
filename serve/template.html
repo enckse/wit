@@ -108,6 +108,10 @@ textarea {
     </div>
 <div class="footer">
     Version: {{ .Build }}
+{{ if $.HasReturn }}
+    <br />
+    <a href="{{ $.ReturnTo }}">back</a>
+{{end}}
 </div>
 </div>
 </body>

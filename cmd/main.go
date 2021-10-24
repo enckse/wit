@@ -19,9 +19,10 @@ func main() {
 	lib := flag.String("cache", "/var/lib/wit", "cache directory")
 	device := flag.String("device", "/run/lirc/lircd", "lircd device")
 	irSend := flag.String("irsend", "/usr/bin/irsend", "irsend executable")
+	home := flag.String("home", "", "url to display as a 'home' link")
 	opModes := flag.String("opmodes", "COOL74,HEAT72", "operation modes (comma separated list)")
 	flag.Parse()
-	cfg := serve.NewConfig(*config, *lib, *device, *irSend, version, strings.Split(*opModes, ","))
+	cfg := serve.NewConfig(*config, *lib, *device, *irSend, version, *home, strings.Split(*opModes, ","))
 	mux := http.NewServeMux()
 	if err := cfg.SetupServer(mux); err != nil {
 		stock.Die("failed to setup server", err)
