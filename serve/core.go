@@ -24,11 +24,13 @@ var (
 )
 
 const (
-	onAction  = "on"
-	offAction = "off"
-	noAction  = ""
-	isDisplay = "display"
-	endpoint  = "/wit/"
+	onAction    = "on"
+	offAction   = "off"
+	noAction    = ""
+	isDisplay   = "display"
+	endpoint    = "/wit/"
+	weekdayType = "weekday"
+	weekendType = "weekend"
 )
 
 type (
@@ -296,6 +298,10 @@ func act(action string, isChange bool, req *http.Request, ctx context) error {
 
 func parseSchedule(schedule string) (string, error) {
 	current := time.Now()
+	isWeekend := false
+	if weekday := current.Weekday(); weekday == time.Sunday || weekday == time.Saturday {
+		isWeekend = true
+	}
 	tracking := newScheduleTime(0, 0, offAction)
 	timings := []scheduleTime{tracking}
 	for _, line := range strings.Split(strings.TrimSpace(schedule), "\n") {
@@ -303,10 +309,10 @@ func parseSchedule(schedule string) (string, error) {
 			continue
 		}
 		parts := strings.Split(strings.TrimSpace(line), " ")
-		if len(parts) != 3 {
+		if len(parts) != 4 {
 			return "", stock.NewBasicError("invalid schedule line, should be 'min hour action'")
 		}
-		toggle := parts[2]
+		toggle := parts[3]
 		if toggle != onAction && toggle != offAction {
 			return "", stock.NewBasicError("schedule can only be 'on' or 'off'")
 		}
@@ -323,6 +329,21 @@ func parseSchedule(schedule string) (string, error) {
 		}
 		if min < 0 || min > 59 {
 			return "", stock.NewBasicError("minute is invalid")
+		}
+		dayType := parts[2]
+		if dayType == weekendType || dayType == weekdayType {
+			isDayTypeWeekend := dayType == weekendType
+			if isWeekend {
+				if !isDayTypeWeekend {
+					continue
+				}
+			} else {
+				if isDayTypeWeekend {
+					continue
+				}
+			}
+		} else {
+			return "", stock.NewBasicError("invalid day type")
 		}
 		lineTrack := newScheduleTime(hour, min, toggle)
 		timings = append(timings, lineTrack)
