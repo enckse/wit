@@ -5,8 +5,8 @@ import (
 	"net/http"
 	"strings"
 
-	"voidedtech.com/stock"
-	"voidedtech.com/wit/serve"
+	"github.com/enckse/basic"
+	"github.com/enckse/wit/serve"
 )
 
 var (
@@ -25,13 +25,13 @@ func main() {
 	cfg := serve.NewConfig(*config, *lib, *device, *irSend, version, *home, strings.Split(*opModes, ","))
 	mux := http.NewServeMux()
 	if err := cfg.SetupServer(mux); err != nil {
-		stock.Die("failed to setup server", err)
+		basic.Die("failed to setup server", err)
 	}
 	srv := &http.Server{
 		Addr:    *binding,
 		Handler: mux,
 	}
 	if err := srv.ListenAndServe(); err != nil {
-		stock.LogError("listen and serve failed", err)
+		basic.LogError("listen and serve failed", err)
 	}
 }

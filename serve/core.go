@@ -14,7 +14,7 @@ import (
 	"sync"
 	"time"
 
-	"voidedtech.com/stock"
+	"github.com/enckse/basic"
 )
 
 var (
@@ -97,7 +97,7 @@ func NewConfig(configFile, cache, device, irSend, vers, returnURL string, opMode
 func (ctx context) getState() (*State, error) {
 	lock.Lock()
 	defer lock.Unlock()
-	if !stock.PathExists(ctx.stateFile) {
+	if !basic.PathExists(ctx.stateFile) {
 		return &State{}, nil
 	}
 	b, err := os.ReadFile(ctx.stateFile)
@@ -148,17 +148,17 @@ func schedulerDaemon(ctx context) {
 				if state.Override {
 					state.Override = false
 					if err := ctx.setState(state); err != nil {
-						stock.LogError("unable to writeback override disable", err)
+						basic.LogError("unable to writeback override disable", err)
 					}
 				}
 			}
 			if !state.Manual {
 				if err := doScheduled(ctx); err != nil {
-					stock.LogError("scheduler failed", err)
+					basic.LogError("scheduler failed", err)
 				}
 			}
 		} else {
-			stock.LogError("unable to read state", err)
+			basic.LogError("unable to read state", err)
 		}
 		today = now
 	}
@@ -181,9 +181,9 @@ func (ctx context) mode(targetMode string, start bool) string {
 func (cfg Config) SetupServer(mux *http.ServeMux) error {
 	ctx := context{}
 	library := cfg.cache
-	if !stock.PathExists(library) {
+	if !basic.PathExists(library) {
 		if err := os.MkdirAll(library, 0755); err != nil {
-			stock.Die("unable to make library dir", err)
+			basic.Die("unable to make library dir", err)
 		}
 	}
 	ctx.cfg = cfg
@@ -191,12 +191,12 @@ func (cfg Config) SetupServer(mux *http.ServeMux) error {
 	ctx.stateFile = filepath.Join(library, "state.json")
 	tmpl, err := template.New("error").Parse("<html><body>{{ .Error }}</body></html>")
 	if err != nil {
-		stock.Die("invalid template for errors", err)
+		basic.Die("invalid template for errors", err)
 	}
 	ctx.errorTemplate = tmpl
 	page, err := template.New("page").Parse(templateHTML)
 	if err != nil {
-		stock.Die("unable to read html template", err)
+		basic.Die("unable to read html template", err)
 	}
 	ctx.pageTemplate = page
 	go schedulerDaemon(ctx)
@@ -288,7 +288,7 @@ func act(action string, isChange bool, req *http.Request, ctx context) error {
 				return err
 			}
 		default:
-			stock.LogError(fmt.Sprintf("unknown action: %s", action), nil)
+			basic.LogError(fmt.Sprintf("unknown action: %s", action), nil)
 			return nil
 		}
 		return nil
@@ -310,25 +310,25 @@ func parseSchedule(schedule string) (string, error) {
 		}
 		parts := strings.Split(strings.TrimSpace(line), " ")
 		if len(parts) != 4 {
-			return "", stock.NewBasicError("invalid schedule line, should be 'min hour action'")
+			return "", basic.NewBasicError("invalid schedule line, should be 'min hour action'")
 		}
 		toggle := parts[3]
 		if toggle != onAction && toggle != offAction {
-			return "", stock.NewBasicError("schedule can only be 'on' or 'off'")
+			return "", basic.NewBasicError("schedule can only be 'on' or 'off'")
 		}
 		hour, err := strconv.Atoi(parts[1])
 		if err != nil {
 			return "", err
 		}
 		if hour < 0 || hour > 23 {
-			return "", stock.NewBasicError("hour is invalid")
+			return "", basic.NewBasicError("hour is invalid")
 		}
 		min, err := strconv.Atoi(parts[0])
 		if err != nil {
 			return "", err
 		}
 		if min < 0 || min > 59 {
-			return "", stock.NewBasicError("minute is invalid")
+			return "", basic.NewBasicError("minute is invalid")
 		}
 		dayType := parts[2]
 		if dayType == weekendType || dayType == weekdayType {
@@ -343,7 +343,7 @@ func parseSchedule(schedule string) (string, error) {
 				}
 			}
 		} else {
-			return "", stock.NewBasicError("invalid day type")
+			return "", basic.NewBasicError("invalid day type")
 		}
 		lineTrack := newScheduleTime(hour, min, toggle)
 		timings = append(timings, lineTrack)
@@ -372,14 +372,14 @@ func setYes(toggled bool) string {
 
 func doTemplate(w http.ResponseWriter, tmpl *template.Template, obj Result) {
 	if err := tmpl.Execute(w, obj); err != nil {
-		stock.LogError("unable to execute template", err)
+		basic.LogError("unable to execute template", err)
 	}
 }
 
 func doActionCall(w http.ResponseWriter, r *http.Request, ctx context) {
 	parts := strings.Split(r.URL.String(), "/")
 	if len(parts) != 3 {
-		stock.LogError("invalid action, not given", nil)
+		basic.LogError("invalid action, not given", nil)
 		return
 	}
 	action := parts[2]

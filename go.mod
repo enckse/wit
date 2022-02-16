@@ -1,5 +1,5 @@
-module voidedtech.com/wit
+module github.com/enckse/wit
 
 go 1.17
 
-require voidedtech.com/stock v0.0.0-20211014234009-93c0ed43354e
+require github.com/enckse/basic v0.0.0-20220216153502-2a684188f230
