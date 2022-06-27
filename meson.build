@@ -1,11 +1,11 @@
 project('wit')
 golang = find_program('go')
 main = join_paths(meson.current_source_dir(), 'cmd/main.go')
-git_ver = run_command('git', 'log', '-n', '1', '--format=%h').stdout().strip()
+git_ver = run_command('git', 'log', '-n', '1', '--format=%h', check: true).stdout().strip()
 vers = '-X main.version=' + git_ver
 flags = ['-ldflags'] + [vers] + ['-trimpath', '-buildmode=pie', '-mod=readonly', '-modcacherw']
 
-in_files = run_command('find', meson.current_source_dir(), '-type', 'f', '-name', '*.go').stdout().strip().split()
+in_files = run_command('find', meson.current_source_dir(), '-type', 'f', '-name', '*.go', check: true).stdout().strip().split()
 in_files += 'go.mod'
 in_files += 'go.sum'
 
