@@ -14,8 +14,6 @@ import (
 	"strings"
 	"sync"
 	"time"
-
-	"github.com/enckse/basic"
 )
 
 var (
@@ -81,7 +79,15 @@ type (
 		Override bool
 		Running  bool
 	}
+
+	internalError struct {
+		message string
+	}
 )
+
+func (err *internalError) Error() string {
+	return err.message
+}
 
 // NewConfig will create a new configuration.
 func NewConfig(configFile, cache, device, irSend, vers, returnURL string, opModes []string) Config {
@@ -99,7 +105,7 @@ func NewConfig(configFile, cache, device, irSend, vers, returnURL string, opMode
 func (ctx context) getState() (*State, error) {
 	lock.Lock()
 	defer lock.Unlock()
-	if !basic.PathExists(ctx.stateFile) {
+	if !pathExists(ctx.stateFile) {
 		return &State{}, nil
 	}
 	b, err := os.ReadFile(ctx.stateFile)
@@ -111,6 +117,15 @@ func (ctx context) getState() (*State, error) {
 		return nil, err
 	}
 	return obj, nil
+}
+
+func pathExists(path string) bool {
+	if _, err := os.Stat(path); err != nil {
+		if os.IsNotExist(err) {
+			return false
+		}
+	}
+	return true
 }
 
 func (ctx context) setState(s *State) error {
@@ -150,20 +165,33 @@ func schedulerDaemon(ctx context) {
 				if state.Override {
 					state.Override = false
 					if err := ctx.setState(state); err != nil {
-						basic.LogError("unable to writeback override disable", err)
+						logError("unable to writeback override disable", err)
 					}
 				}
 			}
 			if !state.Manual {
 				if err := doScheduled(ctx); err != nil {
-					basic.LogError("scheduler failed", err)
+					logError("scheduler failed", err)
 				}
 			}
 		} else {
-			basic.LogError("unable to read state", err)
+			logError("unable to read state", err)
 		}
 		today = now
 	}
+}
+
+func logError(message string, err error) {
+	msg := message
+	if err != nil {
+		msg = fmt.Sprintf("%s (%v)", msg, err)
+	}
+	fmt.Fprintln(os.Stderr, msg)
+}
+
+func quit(message string, err error) {
+	logError(message, err)
+	os.Exit(1)
 }
 
 func newScheduleTime(hr, min int, action string) scheduleTime {
@@ -183,9 +211,9 @@ func (ctx context) mode(targetMode string, start bool) string {
 func (cfg Config) SetupServer(mux *http.ServeMux) error {
 	ctx := context{}
 	library := cfg.cache
-	if !basic.PathExists(library) {
+	if !pathExists(library) {
 		if err := os.MkdirAll(library, 0755); err != nil {
-			basic.Die("unable to make library dir", err)
+			quit("unable to make library dir", err)
 		}
 	}
 	ctx.cfg = cfg
@@ -193,12 +221,12 @@ func (cfg Config) SetupServer(mux *http.ServeMux) error {
 	ctx.stateFile = filepath.Join(library, "state.json")
 	tmpl, err := template.New("error").Parse("<html><body>{{ .Error }}</body></html>")
 	if err != nil {
-		basic.Die("invalid template for errors", err)
+		quit("invalid template for errors", err)
 	}
 	ctx.errorTemplate = tmpl
 	page, err := template.New("page").Parse(templateHTML)
 	if err != nil {
-		basic.Die("unable to read html template", err)
+		quit("unable to read html template", err)
 	}
 	ctx.pageTemplate = page
 	go schedulerDaemon(ctx)
@@ -290,12 +318,16 @@ func act(action string, isChange bool, req *http.Request, ctx context) error {
 				return err
 			}
 		default:
-			basic.LogError(fmt.Sprintf("unknown action: %s", action), nil)
+			logError(fmt.Sprintf("unknown action: %s", action), nil)
 			return nil
 		}
 		return nil
 	}
 	return nil
+}
+
+func newError(message string) error {
+	return &internalError{message}
 }
 
 func parseSchedule(schedule string) (string, error) {
@@ -312,25 +344,25 @@ func parseSchedule(schedule string) (string, error) {
 		}
 		parts := strings.Split(strings.TrimSpace(line), " ")
 		if len(parts) != 4 {
-			return "", basic.NewBasicError("invalid schedule line, should be 'min hour action'")
+			return "", newError("invalid schedule line, should be 'min hour action'")
 		}
 		toggle := parts[3]
 		if toggle != onAction && toggle != offAction {
-			return "", basic.NewBasicError("schedule can only be 'on' or 'off'")
+			return "", newError("schedule can only be 'on' or 'off'")
 		}
 		hour, err := strconv.Atoi(parts[1])
 		if err != nil {
 			return "", err
 		}
 		if hour < 0 || hour > 23 {
-			return "", basic.NewBasicError("hour is invalid")
+			return "", newError("hour is invalid")
 		}
 		min, err := strconv.Atoi(parts[0])
 		if err != nil {
 			return "", err
 		}
 		if min < 0 || min > 59 {
-			return "", basic.NewBasicError("minute is invalid")
+			return "", newError("minute is invalid")
 		}
 		dayType := parts[2]
 		if dayType == weekendType || dayType == weekdayType {
@@ -345,7 +377,7 @@ func parseSchedule(schedule string) (string, error) {
 				}
 			}
 		} else {
-			return "", basic.NewBasicError("invalid day type")
+			return "", newError("invalid day type")
 		}
 		lineTrack := newScheduleTime(hour, min, toggle)
 		timings = append(timings, lineTrack)
@@ -374,14 +406,14 @@ func setYes(toggled bool) string {
 
 func doTemplate(w http.ResponseWriter, tmpl *template.Template, obj Result) {
 	if err := tmpl.Execute(w, obj); err != nil {
-		basic.LogError("unable to execute template", err)
+		logError("unable to execute template", err)
 	}
 }
 
 func doActionCall(w http.ResponseWriter, r *http.Request, ctx context) {
 	parts := strings.Split(r.URL.String(), "/")
 	if len(parts) != 3 {
-		basic.LogError("invalid action, not given", nil)
+		logError("invalid action, not given", nil)
 		return
 	}
 	action := parts[2]
@@ -433,13 +465,13 @@ func main() {
 	cfg := NewConfig(*config, *lib, *device, *irSend, version, *home, strings.Split(*opModes, ","))
 	mux := http.NewServeMux()
 	if err := cfg.SetupServer(mux); err != nil {
-		basic.Die("failed to setup server", err)
+		quit("failed to setup server", err)
 	}
 	srv := &http.Server{
 		Addr:    *binding,
 		Handler: mux,
 	}
 	if err := srv.ListenAndServe(); err != nil {
-		basic.LogError("listen and serve failed", err)
+		logError("listen and serve failed", err)
 	}
 }
