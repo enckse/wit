@@ -31,6 +31,7 @@ const (
 	endpoint    = "/wit/"
 	weekdayType = "weekday"
 	weekendType = "weekend"
+	detectModes = "detect"
 )
 
 type (
@@ -90,16 +91,43 @@ func (err *internalError) Error() string {
 }
 
 // NewConfig will create a new configuration.
-func NewConfig(configFile, cache, device, irSend, vers, returnURL string, opModes []string) Config {
+func NewConfig(configFile, cache, device, irSend, vers, returnURL string, opModes []string) (Config, error) {
+	modes := opModes
+	if len(modes) == 1 && modes[0] == detectModes {
+		modes = []string{}
+		data, err := os.ReadFile(configFile)
+		if err != nil {
+			return Config{}, err
+		}
+		inRaw := false
+		for _, line := range strings.Split(string(data), "\n") {
+			trimmed := strings.TrimSpace(line)
+			if inRaw {
+				if trimmed == "end raw_codes" {
+					break
+				}
+				if strings.HasPrefix(trimmed, "name ") {
+					parts := strings.Split(trimmed, " ")
+					if len(parts) == 2 {
+						modes = append(modes, parts[1])
+					}
+				}
+			} else {
+				if trimmed == "begin raw_codes" {
+					inRaw = true
+				}
+			}
+		}
+	}
 	return Config{
 		configFile: configFile,
 		cache:      cache,
 		device:     device,
 		irSend:     irSend,
 		version:    vers,
-		opModes:    opModes,
+		opModes:    modes,
 		returnURL:  returnURL,
-	}
+	}, nil
 }
 
 func (ctx context) getState() (*State, error) {
@@ -460,9 +488,12 @@ func main() {
 	device := flag.String("device", "/run/lirc/lircd", "lircd device")
 	irSend := flag.String("irsend", "/usr/bin/irsend", "irsend executable")
 	home := flag.String("home", "", "url to display as a 'home' link")
-	opModes := flag.String("opmodes", "COOL74,HEAT72", "operation modes (comma separated list)")
+	opModes := flag.String("opmodes", detectModes, "operation modes (comma separated list, or 'detect' to read the lirccfg file)")
 	flag.Parse()
-	cfg := NewConfig(*config, *lib, *device, *irSend, version, *home, strings.Split(*opModes, ","))
+	cfg, err := NewConfig(*config, *lib, *device, *irSend, version, *home, strings.Split(*opModes, ","))
+	if err != nil {
+		quit("failed to create config", err)
+	}
 	mux := http.NewServeMux()
 	if err := cfg.SetupServer(mux); err != nil {
 		quit("failed to setup server", err)
