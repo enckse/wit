@@ -107,7 +107,7 @@ func NewConfig(lircConfig, cache, device, irSend, vers, returnURL string) (Confi
 	var modes []string
 	lircName := ""
 	modes = []string{}
-	data, err := os.ReadFile(modes[0])
+	data, err := os.ReadFile(lircConfig)
 	if err != nil {
 		return Config{}, err
 	}
