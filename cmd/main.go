@@ -31,7 +31,6 @@ const (
 	endpoint    = "/wit/"
 	weekdayType = "weekday"
 	weekendType = "weekend"
-	detectModes = "detect"
 )
 
 type (
@@ -63,13 +62,13 @@ type (
 	}
 	// Config handles wit configuration.
 	Config struct {
-		configFile string
-		cache      string
-		device     string
-		irSend     string
-		version    string
-		opModes    []string
-		returnURL  string
+		lircName  string
+		cache     string
+		device    string
+		irSend    string
+		version   string
+		opModes   []string
+		returnURL string
 	}
 
 	// State represents on the current system state to persist to disk.
@@ -91,11 +90,11 @@ func (err *internalError) Error() string {
 }
 
 // NewConfig will create a new configuration.
-func NewConfig(configFile, cache, device, irSend, vers, returnURL string, opModes []string) (Config, error) {
+func NewConfig(lircName, cache, device, irSend, vers, returnURL string, opModes []string) (Config, error) {
 	modes := opModes
-	if len(modes) == 1 && modes[0] == detectModes {
+	if len(modes) == 1 && pathExists(modes[0]) {
 		modes = []string{}
-		data, err := os.ReadFile(configFile)
+		data, err := os.ReadFile(modes[0])
 		if err != nil {
 			return Config{}, err
 		}
@@ -120,13 +119,13 @@ func NewConfig(configFile, cache, device, irSend, vers, returnURL string, opMode
 		}
 	}
 	return Config{
-		configFile: configFile,
-		cache:      cache,
-		device:     device,
-		irSend:     irSend,
-		version:    vers,
-		opModes:    modes,
-		returnURL:  returnURL,
+		lircName:  lircName,
+		cache:     cache,
+		device:    device,
+		irSend:    irSend,
+		version:   vers,
+		opModes:   modes,
+		returnURL: returnURL,
 	}, nil
 }
 
@@ -478,19 +477,19 @@ func doActionCall(w http.ResponseWriter, r *http.Request, ctx context) {
 }
 
 func (ctx context) actuate(mode string) error {
-	return exec.Command(ctx.cfg.irSend, fmt.Sprintf("--device=%s", ctx.cfg.device), "SEND_ONCE", ctx.cfg.configFile, mode).Run()
+	return exec.Command(ctx.cfg.irSend, fmt.Sprintf("--device=%s", ctx.cfg.device), "SEND_ONCE", ctx.cfg.lircName, mode).Run()
 }
 
 func main() {
 	binding := flag.String("binding", ":7801", "http binding")
-	config := flag.String("lirccfg", "BRYANT", "lirc config")
+	lircName := flag.String("lircname", "BRYANT", "lirc config name")
 	lib := flag.String("cache", "/var/lib/wit", "cache directory")
 	device := flag.String("device", "/run/lirc/lircd", "lircd device")
 	irSend := flag.String("irsend", "/usr/bin/irsend", "irsend executable")
 	home := flag.String("home", "", "url to display as a 'home' link")
-	opModes := flag.String("opmodes", detectModes, "operation modes (comma separated list, or 'detect' to read the lirccfg file)")
+	opModes := flag.String("opmodes", "", "operation modes (comma separated list, or a lirc config file to parse/read")
 	flag.Parse()
-	cfg, err := NewConfig(*config, *lib, *device, *irSend, version, *home, strings.Split(*opModes, ","))
+	cfg, err := NewConfig(*lircName, *lib, *device, *irSend, version, *home, strings.Split(*opModes, ","))
 	if err != nil {
 		quit("failed to create config", err)
 	}
