@@ -89,34 +89,56 @@ func (err *internalError) Error() string {
 	return err.message
 }
 
-// NewConfig will create a new configuration.
-func NewConfig(lircName, cache, device, irSend, vers, returnURL string, opModes []string) (Config, error) {
-	modes := opModes
-	if len(modes) == 1 && pathExists(modes[0]) {
-		modes = []string{}
-		data, err := os.ReadFile(modes[0])
-		if err != nil {
-			return Config{}, err
+func parseConfigName(line string) string {
+	if strings.HasPrefix(line, "name ") {
+		parts := strings.Split(line, " ")
+		if len(parts) == 2 {
+			return parts[1]
 		}
-		inRaw := false
-		for _, line := range strings.Split(string(data), "\n") {
-			trimmed := strings.TrimSpace(line)
-			if inRaw {
-				if trimmed == "end raw_codes" {
-					break
-				}
-				if strings.HasPrefix(trimmed, "name ") {
-					parts := strings.Split(trimmed, " ")
-					if len(parts) == 2 {
-						modes = append(modes, parts[1])
-					}
-				}
-			} else {
-				if trimmed == "begin raw_codes" {
-					inRaw = true
-				}
+	}
+	return ""
+}
+
+// NewConfig will create a new configuration.
+func NewConfig(lircConfig, cache, device, irSend, vers, returnURL string) (Config, error) {
+	if !pathExists(lircConfig) {
+		return Config{}, newError("config file for lirc does not exist")
+	}
+	var modes []string
+	lircName := ""
+	modes = []string{}
+	data, err := os.ReadFile(modes[0])
+	if err != nil {
+		return Config{}, err
+	}
+	inRaw := false
+	lastLine := ""
+	for _, line := range strings.Split(string(data), "\n") {
+		trimmed := strings.TrimSpace(line)
+		if trimmed == "" {
+			continue
+		}
+		if lastLine == "begin remote" {
+			if name := parseConfigName(trimmed); name != "" {
+				lircName = name
 			}
 		}
+		if inRaw {
+			if trimmed == "end raw_codes" {
+				break
+			}
+			if name := parseConfigName(trimmed); name != "" {
+				modes = append(modes, name)
+			}
+		} else {
+			if trimmed == "begin raw_codes" {
+				inRaw = true
+			}
+		}
+		lastLine = trimmed
+	}
+	if len(modes) == 0 || lircName == "" {
+		return Config{}, newError("failed parsing lirc config for necessary values")
 	}
 	return Config{
 		lircName:  lircName,
@@ -482,14 +504,13 @@ func (ctx context) actuate(mode string) error {
 
 func main() {
 	binding := flag.String("binding", ":7801", "http binding")
-	lircName := flag.String("lircname", "BRYANT", "lirc config name")
+	lircConfig := flag.String("lirccfg", "BRYANT", "lirc config name")
 	lib := flag.String("cache", "/var/lib/wit", "cache directory")
 	device := flag.String("device", "/run/lirc/lircd", "lircd device")
 	irSend := flag.String("irsend", "/usr/bin/irsend", "irsend executable")
 	home := flag.String("home", "", "url to display as a 'home' link")
-	opModes := flag.String("opmodes", "", "operation modes (comma separated list, or a lirc config file to parse/read")
 	flag.Parse()
-	cfg, err := NewConfig(*lircName, *lib, *device, *irSend, version, *home, strings.Split(*opModes, ","))
+	cfg, err := NewConfig(*lircConfig, *lib, *device, *irSend, version, *home)
 	if err != nil {
 		quit("failed to create config", err)
 	}
