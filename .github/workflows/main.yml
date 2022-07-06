@@ -10,7 +10,7 @@ jobs:
     steps:
       - uses: actions/checkout@v2
       - name: "deps"
-        run: apk add go meson samurai git
+        run: apk add go meson samurai
       - name: "meson"
         run: meson setup build
       - name: "ninja"
