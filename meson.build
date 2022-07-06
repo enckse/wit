@@ -1,12 +1,8 @@
-project('wit')
+project('wit', version: 'development')
 fs = import('fs')
 golang = find_program('go')
 main = join_paths(meson.current_source_dir(), 'cmd/main.go')
-git_ver = 'unknown'
-if fs.exists('.git')
-  git_ver = run_command('git', 'log', '-n', '1', '--format=%h', check: true).stdout().strip()
-endif
-vers = '-X main.version=' + git_ver
+vers = '-X main.version=' + meson.project_version()
 flags = ['-ldflags'] + [vers] + ['-trimpath', '-buildmode=pie', '-mod=readonly', '-modcacherw']
 
 in_files = run_command('find', meson.current_source_dir(), '-type', 'f', '-name', '*.go', check: true).stdout().strip().split()
