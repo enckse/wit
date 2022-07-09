@@ -45,8 +45,6 @@ type (
 		Schedule       string
 		Build          string
 		OperationModes []string
-		HasReturn      bool
-		ReturnTo       string
 	}
 	scheduleTime struct {
 		hour   int
@@ -68,7 +66,6 @@ type (
 		irSend    string
 		version   string
 		opModes   []string
-		returnURL string
 	}
 
 	// State represents on the current system state to persist to disk.
@@ -100,7 +97,7 @@ func parseConfigName(line string) string {
 }
 
 // NewConfig will create a new configuration.
-func NewConfig(lircConfig, cache, device, irSend, vers, returnURL string) (Config, error) {
+func NewConfig(lircConfig, cache, device, irSend, vers string) (Config, error) {
 	if !pathExists(lircConfig) {
 		return Config{}, newError("config file for lirc does not exist")
 	}
@@ -147,7 +144,6 @@ func NewConfig(lircConfig, cache, device, irSend, vers, returnURL string) (Confi
 		irSend:    irSend,
 		version:   vers,
 		opModes:   modes,
-		returnURL: returnURL,
 	}, nil
 }
 
@@ -493,8 +489,6 @@ func doActionCall(w http.ResponseWriter, r *http.Request, ctx context) {
 	result.Time = time.Now().Format("2006-01-02T15:04:05")
 	acMode := state.OpMode
 	result.System = acMode
-	result.HasReturn = len(ctx.cfg.returnURL) > 0
-	result.ReturnTo = ctx.cfg.returnURL
 	doTemplate(w, ctx.pageTemplate, result)
 }
 
@@ -508,9 +502,8 @@ func main() {
 	lib := flag.String("cache", "/var/lib/wit", "cache directory")
 	device := flag.String("device", "/run/lirc/lircd", "lircd device")
 	irSend := flag.String("irsend", "/usr/bin/irsend", "irsend executable")
-	home := flag.String("home", "", "url to display as a 'home' link")
 	flag.Parse()
-	cfg, err := NewConfig(*lircConfig, *lib, *device, *irSend, version, *home)
+	cfg, err := NewConfig(*lircConfig, *lib, *device, *irSend, version)
 	if err != nil {
 		quit("failed to create config", err)
 	}
