@@ -52,20 +52,27 @@ type (
 		action string
 	}
 	context struct {
-		cfg           Config
-		version       string
+		cfg           Configuration
 		stateFile     string
 		pageTemplate  *template.Template
 		errorTemplate *template.Template
 	}
-	// Config handles wit configuration.
-	Config struct {
-		lircName  string
-		cache     string
-		device    string
-		irSend    string
-		version   string
-		opModes   []string
+	// Configuration is the wit configuration file definition.
+	Configuration struct {
+		Binding  string            `json:"binding"`
+		LIRC     LIRCConfiguration `json:"lirc"`
+		Cache    string            `json:"cache"`
+		lircName string
+		opModes  []string
+		version  string
+	}
+	// LIRCConfiguration is the backing LIRC requirements to run lirc.
+	LIRCConfiguration struct {
+		Socket string   `json:"socket"`
+		Config string   `json:"config"`
+		IRSend string   `json:"irsend"`
+		Daemon bool     `json:"daemon"`
+		Args   []string `json:"args"`
 	}
 
 	// State represents on the current system state to persist to disk.
@@ -96,17 +103,16 @@ func parseConfigName(line string) string {
 	return ""
 }
 
-// NewConfig will create a new configuration.
-func NewConfig(lircConfig, cache, device, irSend, vers string) (Config, error) {
-	if !pathExists(lircConfig) {
-		return Config{}, newError("config file for lirc does not exist")
+func (c *Configuration) parseLIRCConfig() error {
+	if !pathExists(c.LIRC.Config) {
+		return newError("config file for lirc does not exist")
 	}
 	var modes []string
 	lircName := ""
 	modes = []string{}
-	data, err := os.ReadFile(lircConfig)
+	data, err := os.ReadFile(c.LIRC.Config)
 	if err != nil {
-		return Config{}, err
+		return err
 	}
 	inRaw := false
 	lastLine := ""
@@ -135,16 +141,11 @@ func NewConfig(lircConfig, cache, device, irSend, vers string) (Config, error) {
 		lastLine = trimmed
 	}
 	if len(modes) == 0 || lircName == "" {
-		return Config{}, newError("failed parsing lirc config for necessary values")
+		return newError("failed parsing lirc config for necessary values")
 	}
-	return Config{
-		lircName:  lircName,
-		cache:     cache,
-		device:    device,
-		irSend:    irSend,
-		version:   vers,
-		opModes:   modes,
-	}, nil
+	c.opModes = modes
+	c.lircName = lircName
+	return nil
 }
 
 func (ctx context) getState() (*State, error) {
@@ -253,16 +254,15 @@ func (ctx context) mode(targetMode string, start bool) string {
 }
 
 // SetupServer will prepare the wit server.
-func (cfg Config) SetupServer(mux *http.ServeMux) error {
+func (c Configuration) SetupServer(mux *http.ServeMux) error {
 	ctx := context{}
-	library := cfg.cache
+	library := c.Cache
 	if !pathExists(library) {
 		if err := os.MkdirAll(library, 0755); err != nil {
 			quit("unable to make library dir", err)
 		}
 	}
-	ctx.cfg = cfg
-	ctx.version = cfg.version
+	ctx.cfg = c
 	ctx.stateFile = filepath.Join(library, "state.json")
 	tmpl, err := template.New("error").Parse("<html><body>{{ .Error }}</body></html>")
 	if err != nil {
@@ -485,7 +485,7 @@ func doActionCall(w http.ResponseWriter, r *http.Request, ctx context) {
 	result.OperationModes = ctx.cfg.opModes
 	schedule := state.Schedule
 	result.Schedule = schedule
-	result.Build = ctx.version
+	result.Build = ctx.cfg.version
 	result.Time = time.Now().Format("2006-01-02T15:04:05")
 	acMode := state.OpMode
 	result.System = acMode
@@ -493,27 +493,54 @@ func doActionCall(w http.ResponseWriter, r *http.Request, ctx context) {
 }
 
 func (ctx context) actuate(mode string) error {
-	return exec.Command(ctx.cfg.irSend, fmt.Sprintf("--device=%s", ctx.cfg.device), "SEND_ONCE", ctx.cfg.lircName, mode).Run()
+	return exec.Command(ctx.cfg.LIRC.IRSend, fmt.Sprintf("--device=%s", ctx.cfg.LIRC.Socket), "SEND_ONCE", ctx.cfg.lircName, mode).Run()
+}
+
+func runLIRCDaemon(args []string) {
+	for {
+		cmd := exec.Command("lircd", args...)
+		cmd.Stdout = os.Stdout
+		cmd.Stderr = os.Stderr
+		if err := cmd.Run(); err != nil {
+			logError("lircd failure", err)
+		}
+		time.Sleep(30 * time.Second)
+	}
+}
+
+func (c *Configuration) runLIRC() {
+	var args []string
+	args = append(args, c.LIRC.Args...)
+	args = append(args, []string{"-o", c.LIRC.Socket}...)
+	args = append(args, c.LIRC.Config)
+	go runLIRCDaemon(args)
 }
 
 func main() {
-	binding := flag.String("binding", ":7801", "http binding")
-	lircConfig := flag.String("lirccfg", "BRYANT", "lirc config name")
-	lib := flag.String("cache", "/var/lib/wit", "cache directory")
-	device := flag.String("device", "/run/lirc/lircd", "lircd device")
-	irSend := flag.String("irsend", "/usr/bin/irsend", "irsend executable")
+	configurationFile := flag.String("config", "/etc/wit.json", "wit configuration file")
 	flag.Parse()
-	cfg, err := NewConfig(*lircConfig, *lib, *device, *irSend, version)
+	b, err := os.ReadFile(*configurationFile)
 	if err != nil {
-		quit("failed to create config", err)
+		quit("unable to read config file", err)
+	}
+	config := &Configuration{}
+	if err := json.Unmarshal(b, &config); err != nil {
+		quit("failed to read config json", err)
+	}
+	config.version = version
+	if err := config.parseLIRCConfig(); err != nil {
+		quit("unable to parse LIRC config", err)
 	}
 	mux := http.NewServeMux()
-	if err := cfg.SetupServer(mux); err != nil {
+	if err := config.SetupServer(mux); err != nil {
 		quit("failed to setup server", err)
 	}
 	srv := &http.Server{
-		Addr:    *binding,
+		Addr:    config.Binding,
 		Handler: mux,
+	}
+	if config.LIRC.Daemon {
+		config.runLIRC()
 	}
 	if err := srv.ListenAndServe(); err != nil {
 		logError("listen and serve failed", err)

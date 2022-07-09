@@ -1,0 +1,11 @@
+{
+    "binding": "7800",
+    "lirc": {
+        "socket": "/run/lircd.socket",
+        "config": "/usr/share/wit/lirc.bryant.conf",
+        "irsend": "/usr/bin/irsend",
+        "daemon": true,
+        "args": ["--nodaemon", "-P", "/run/lircd.pid", "-H", "irtoy", "-d", "/dev/ttyACM0"]
+    },
+    "cache": "/var/lib/wit"
+}
