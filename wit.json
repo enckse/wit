@@ -1,5 +1,5 @@
 {
-    "binding": "7800",
+    "binding": ":7800",
     "lirc": {
         "socket": "/run/lircd.socket",
         "config": "/usr/share/wit/lirc.bryant.conf",
