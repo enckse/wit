@@ -10,6 +10,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -24,13 +25,15 @@ var (
 )
 
 const (
-	onAction    = "on"
-	offAction   = "off"
-	noAction    = ""
-	isDisplay   = "display"
-	endpoint    = "/wit/"
-	weekdayType = "weekday"
-	weekendType = "weekend"
+	onAction     = "on"
+	offAction    = "off"
+	noAction     = ""
+	isDisplay    = "display"
+	endpoint     = "/wit/"
+	weekdayType  = "weekday"
+	weekendType  = "weekend"
+	commandStart = "START"
+	commandStop  = "STOP"
 )
 
 type (
@@ -109,13 +112,14 @@ func (c *Configuration) parseLIRCConfig() error {
 	}
 	var modes []string
 	lircName := ""
-	modes = []string{}
 	data, err := os.ReadFile(c.LIRC.Config)
 	if err != nil {
 		return err
 	}
 	inRaw := false
 	lastLine := ""
+	modes = []string{}
+	uniques := make(map[string]int)
 	for _, line := range strings.Split(string(data), "\n") {
 		trimmed := strings.TrimSpace(line)
 		if trimmed == "" {
@@ -131,6 +135,20 @@ func (c *Configuration) parseLIRCConfig() error {
 				break
 			}
 			if name := parseConfigName(trimmed); name != "" {
+				if strings.HasSuffix(name, commandStart) {
+					name = name[:len(name)-len(commandStart)]
+				} else if strings.HasSuffix(name, commandStop) {
+					name = name[:len(name)-len(commandStop)]
+				} else {
+					return newError("unknown mode, not start/top")
+				}
+				val, ok := uniques[name]
+				if !ok {
+					val = 1
+				} else {
+					val++
+				}
+				uniques[name] = val
 				modes = append(modes, name)
 			}
 		} else {
@@ -143,6 +161,12 @@ func (c *Configuration) parseLIRCConfig() error {
 	if len(modes) == 0 || lircName == "" {
 		return newError("failed parsing lirc config for necessary values")
 	}
+	for k, v := range uniques {
+		if v != 2 {
+			return newError(fmt.Sprintf("mismatch start/stop: %s", k))
+		}
+	}
+	sort.Strings(modes)
 	c.opModes = modes
 	c.lircName = lircName
 	return nil
@@ -246,9 +270,9 @@ func newScheduleTime(hr, min int, action string) scheduleTime {
 
 func (ctx context) mode(targetMode string, start bool) string {
 	op := targetMode
-	postfix := "STOP"
+	postfix := commandStop
 	if start {
-		postfix = "START"
+		postfix = commandStart
 	}
 	return fmt.Sprintf("%s%s", op, postfix)
 }
