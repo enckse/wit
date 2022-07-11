@@ -144,12 +144,12 @@ func (c *Configuration) parseLIRCConfig() error {
 				}
 				val, ok := uniques[name]
 				if !ok {
+					modes = append(modes, name)
 					val = 1
 				} else {
 					val++
 				}
 				uniques[name] = val
-				modes = append(modes, name)
 			}
 		} else {
 			if trimmed == "begin raw_codes" {
