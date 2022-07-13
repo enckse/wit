@@ -1,5 +1,4 @@
 project('wit', version: 'development')
-fs = import('fs')
 golang = find_program('go')
 main = join_paths(meson.current_source_dir(), 'cmd/main.go')
 vers = '-X main.version=' + meson.project_version()
