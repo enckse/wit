@@ -3,6 +3,7 @@ package main
 import (
 	_ "embed"
 	"encoding/json"
+	"errors"
 	"flag"
 	"fmt"
 	"html/template"
@@ -86,15 +87,7 @@ type (
 		Override bool
 		Running  bool
 	}
-
-	internalError struct {
-		message string
-	}
 )
-
-func (err *internalError) Error() string {
-	return err.message
-}
 
 func parseConfigName(line string) string {
 	if strings.HasPrefix(line, "name ") {
@@ -108,7 +101,7 @@ func parseConfigName(line string) string {
 
 func (c *Configuration) parseLIRCConfig() error {
 	if !pathExists(c.LIRC.Config) {
-		return newError("config file for lirc does not exist")
+		return errors.New("config file for lirc does not exist")
 	}
 	var modes []string
 	lircName := ""
@@ -140,7 +133,7 @@ func (c *Configuration) parseLIRCConfig() error {
 				} else if strings.HasSuffix(name, commandStop) {
 					name = name[:len(name)-len(commandStop)]
 				} else {
-					return newError("unknown mode, not start/top")
+					return errors.New("unknown mode, not start/top")
 				}
 				val, ok := uniques[name]
 				if !ok {
@@ -159,11 +152,11 @@ func (c *Configuration) parseLIRCConfig() error {
 		lastLine = trimmed
 	}
 	if len(modes) == 0 || lircName == "" {
-		return newError("failed parsing lirc config for necessary values")
+		return errors.New("failed parsing lirc config for necessary values")
 	}
 	for k, v := range uniques {
 		if v != 2 {
-			return newError(fmt.Sprintf("mismatch start/stop: %s", k))
+			return errors.New(fmt.Sprintf("mismatch start/stop: %s", k))
 		}
 	}
 	sort.Strings(modes)
@@ -395,10 +388,6 @@ func act(action string, isChange bool, req *http.Request, ctx context) error {
 	return nil
 }
 
-func newError(message string) error {
-	return &internalError{message}
-}
-
 func parseSchedule(schedule string) (string, error) {
 	current := time.Now()
 	isWeekend := false
@@ -413,25 +402,25 @@ func parseSchedule(schedule string) (string, error) {
 		}
 		parts := strings.Split(strings.TrimSpace(line), " ")
 		if len(parts) != 4 {
-			return "", newError("invalid schedule line, should be 'min hour action'")
+			return "", errors.New("invalid schedule line, should be 'min hour action'")
 		}
 		toggle := parts[3]
 		if toggle != onAction && toggle != offAction {
-			return "", newError("schedule can only be 'on' or 'off'")
+			return "", errors.New("schedule can only be 'on' or 'off'")
 		}
 		hour, err := strconv.Atoi(parts[1])
 		if err != nil {
 			return "", err
 		}
 		if hour < 0 || hour > 23 {
-			return "", newError("hour is invalid")
+			return "", errors.New("hour is invalid")
 		}
 		min, err := strconv.Atoi(parts[0])
 		if err != nil {
 			return "", err
 		}
 		if min < 0 || min > 59 {
-			return "", newError("minute is invalid")
+			return "", errors.New("minute is invalid")
 		}
 		dayType := parts[2]
 		if dayType == weekendType || dayType == weekdayType {
@@ -446,7 +435,7 @@ func parseSchedule(schedule string) (string, error) {
 				}
 			}
 		} else {
-			return "", newError("invalid day type")
+			return "", errors.New("invalid day type")
 		}
 		lineTrack := newScheduleTime(hour, min, toggle)
 		timings = append(timings, lineTrack)
