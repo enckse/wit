@@ -12,7 +12,7 @@ clean:
 	rm -rf $(BUILD)
 
 install:
-	install -Dm755 $(TARGET) $(DESTDIR)bin/wit
-	mkdir -p $(DESTDIR)share/wit
-	install -Dm644 bryant.conf $(DESTDIR)share/wit/lirc.bryant.conf
+	install -Dm755 $(TARGET) $(DESTDIR)usr/bin/wit
+	mkdir -p $(DESTDIR)usr/share/wit
+	install -Dm644 bryant.conf $(DESTDIR)usr/share/wit/lirc.bryant.conf
 	install -Dm644 wit.json $(DESTDIR)etc/wit.json
