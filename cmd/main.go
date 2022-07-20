@@ -41,9 +41,7 @@ type (
 	// Result is how html results are shown.
 	Result struct {
 		Error          string
-		Running        string
 		System         string
-		Time           string
 		Manual         string
 		Override       string
 		Schedule       string
@@ -156,7 +154,7 @@ func (c *Configuration) parseLIRCConfig() error {
 	}
 	for k, v := range uniques {
 		if v != 2 {
-			return errors.New(fmt.Sprintf("mismatch start/stop: %s", k))
+			return fmt.Errorf("mismatch start/stop: %s", k)
 		}
 	}
 	sort.Strings(modes)
@@ -477,6 +475,16 @@ func doActionCall(w http.ResponseWriter, r *http.Request, ctx context) {
 	action := parts[2]
 	isPost := r.Method == "POST"
 	if action != isDisplay {
+		if action == "current" {
+			state, err := ctx.getState()
+			if err != nil {
+				doTemplate(w, ctx.errorTemplate, Result{Error: fmt.Sprintf("%v", err)})
+				return
+			}
+			data := []byte(state.runningState())
+			w.Write(data)
+			return
+		}
 		if err := act(action, isPost, r, ctx); err != nil {
 			doTemplate(w, ctx.errorTemplate, Result{Error: fmt.Sprintf("%v", err)})
 			return
@@ -492,17 +500,19 @@ func doActionCall(w http.ResponseWriter, r *http.Request, ctx context) {
 		doTemplate(w, ctx.errorTemplate, Result{Error: fmt.Sprintf("%v", err)})
 		return
 	}
-	result.Running = setYes(state.Running)
 	result.Override = setYes(state.Override)
 	result.Manual = setYes(state.Manual)
 	result.OperationModes = ctx.cfg.opModes
 	schedule := state.Schedule
 	result.Schedule = schedule
 	result.Build = ctx.cfg.version
-	result.Time = time.Now().Format("2006-01-02T15:04:05")
 	acMode := state.OpMode
 	result.System = acMode
 	doTemplate(w, ctx.pageTemplate, result)
+}
+
+func (s *State) runningState() string {
+	return fmt.Sprintf("%s (%s)", setYes(s.Running), time.Now().Format("2006-01-02T15:04:05"))
 }
 
 func (ctx context) actuate(mode string) error {

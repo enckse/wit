@@ -55,14 +55,38 @@ textarea {
     font-style: italic;
 }
 </style>
+<script>
+function updateStatus() {
+    var xmlHttp = new XMLHttpRequest();
+    xmlHttp.onreadystatechange = function() {
+        if (xmlHttp.readyState == 4 && xmlHttp.status == 200) {
+            let data = xmlHttp.responseText.split(" ");
+            document.getElementById("current").innerHTML = data[0];
+            document.getElementById("time").innerHTML = data[1];
+        }
+    }
+    xmlHttp.open("GET", "/wit/current", true);
+    xmlHttp.send(null);
+}
+function maintainState() {
+    setTimeout(function() {
+        updateStatus();
+        maintainState();
+    }, 5000);
+}
+document.addEventListener("DOMContentLoaded", function(event) {
+    updateStatus();
+    maintainState();
+});
+</script>
 <title>wit</title>
 </head>
 <body>
-<div id="main">
-    {{ .Time }}
+    <div id="main">
+        <div id="time">(N/A)</div>
 <hr />
     <table>
-        <tr><td>Running:</td><td><b>{{ .Running }}</b></td></tr>
+        <tr><td>Running:</td><td><b><div id="current">N/A</div></b></td></tr>
         <tr><td>Mode:</td><td><b>{{ .System }}</b></td></tr>
     </table>
     <form action='/wit/on' method='post'>
