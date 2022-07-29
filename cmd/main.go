@@ -336,7 +336,7 @@ func act(action string, isChange bool, req *http.Request, ctx context) error {
 					}
 				}
 				if actuating {
-					if err := ctx.actuate(ctx.mode(state.OpMode, isOn)); err != nil {
+					if err := exec.Command(ctx.cfg.LIRC.IRSend, fmt.Sprintf("--device=%s", ctx.cfg.LIRC.Socket), "SEND_ONCE", ctx.cfg.lircName, state.OpMode).Run(); err != nil {
 						return err
 					}
 					state.Running = !state.Running
@@ -513,10 +513,6 @@ func doActionCall(w http.ResponseWriter, r *http.Request, ctx context) {
 
 func (s *State) runningState() string {
 	return fmt.Sprintf("%s (%s)", setYes(s.Running), time.Now().Format("2006-01-02T15:04:05"))
-}
-
-func (ctx context) actuate(mode string) error {
-	return exec.Command(ctx.cfg.LIRC.IRSend, fmt.Sprintf("--device=%s", ctx.cfg.LIRC.Socket), "SEND_ONCE", ctx.cfg.lircName, mode).Run()
 }
 
 func runLIRCDaemon(args []string) {
