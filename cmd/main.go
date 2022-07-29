@@ -259,17 +259,7 @@ func newScheduleTime(hr, min int, action string) scheduleTime {
 	return scheduleTime{hour: hr, min: min, action: action}
 }
 
-func (ctx context) mode(targetMode string, start bool) string {
-	op := targetMode
-	postfix := commandStop
-	if start {
-		postfix = commandStart
-	}
-	return fmt.Sprintf("%s%s", op, postfix)
-}
-
-// SetupServer will prepare the wit server.
-func (c Configuration) SetupServer(mux *http.ServeMux) error {
+func (c Configuration) setupServer(mux *http.ServeMux) error {
 	ctx := context{}
 	library := c.Cache
 	if !pathExists(library) {
@@ -551,7 +541,7 @@ func main() {
 		quit("unable to parse LIRC config", err)
 	}
 	mux := http.NewServeMux()
-	if err := config.SetupServer(mux); err != nil {
+	if err := config.setupServer(mux); err != nil {
 		quit("failed to setup server", err)
 	}
 	srv := &http.Server{
