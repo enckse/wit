@@ -326,6 +326,16 @@ func act(action string, isChange bool, req *http.Request, ctx context) error {
 					}
 				}
 				if actuating {
+					valid := false
+					for _, m := range ctx.cfg.opModes {
+						if m == state.OpMode {
+							valid = true
+							break
+						}
+					}
+					if !valid {
+						return fmt.Errorf("invalid mode: %s", state.OpMode)
+					}
 					if err := exec.Command(ctx.cfg.LIRC.IRSend, fmt.Sprintf("--device=%s", ctx.cfg.LIRC.Socket), "SEND_ONCE", ctx.cfg.lircName, state.OpMode).Run(); err != nil {
 						return err
 					}
