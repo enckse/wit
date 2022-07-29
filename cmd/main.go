@@ -441,7 +441,9 @@ func parseSchedule(schedule string) (string, error) {
 				}
 			}
 		} else {
-			return "", errors.New("invalid day type")
+			if dayType != "*" {
+				return "", errors.New("invalid day type")
+			}
 		}
 		lineTrack := newScheduleTime(hour, min, toggle)
 		timings = append(timings, lineTrack)
